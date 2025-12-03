@@ -2,6 +2,13 @@
 
 **This package is in early development. Expect breaking changes.**
 
+## TTS engines
+
+- **Kokoro**: 50+ voices, 9 languages, speed control, streaming
+- **Orpheus**: 8 voices, emotional expressions (`<laugh>`, `<sigh>`, etc.)
+- **Marvis**: Streaming, quality levels, custom reference audio
+- **OuteTTS**: Custom voices with reference audio
+
 ## Installation
 
 ```swift
@@ -13,7 +20,7 @@
 ```swift
 import MLXAudio
 
-// Kokoro - 60+ voices, speed control
+// Kokoro - 50+ voices, speed control
 let kokoro = KokoroEngine()
 try await kokoro.load()
 try await kokoro.say("Hello, world!", voice: .afHeart)
@@ -58,13 +65,6 @@ Build the example app:
 ```sh
 xcodebuild -project 'examples/TTS App/TTS App.xcodeproj' -scheme 'TTS App' -destination 'platform=macOS' build
 ```
-
-## Engines
-
-- **Kokoro**: 60+ voices, 10+ languages, speed control
-- **Orpheus**: Emotional expressions (`<laugh>`, `<sigh>`, etc.)
-- **Marvis**: Streaming audio generation
-- **OuteTTS**: Custom voices with reference audio
 
 ## Legal and ethical considerations
 
