@@ -7,12 +7,10 @@ import SwiftUI
 final class AppState {
   // MARK: - Dependencies
 
-  /// Engine lifecycle manager
   let engineManager: EngineManager
 
   // MARK: - User Input
 
-  /// Text to synthesize
   var inputText: String = "How are you doing today?"
 
   /// Speech speed multiplier (Kokoro only)
@@ -20,18 +18,14 @@ final class AppState {
 
   // MARK: - UI State
 
-  /// Whether to show the inspector panel (macOS/iPad)
   var showInspector: Bool = true
 
-  /// Whether to auto-play generated audio
   var autoPlay: Bool = true
 
-  /// Status message for display
   var statusMessage: String = ""
 
   // MARK: - Generated Output
 
-  /// Last generated audio result
   private(set) var lastResult: AudioResult?
 
   /// Flag to prevent auto-play after user stops
@@ -62,7 +56,6 @@ final class AppState {
 
   // MARK: - Provider Management
 
-  /// Switch to a different TTS provider
   func selectProvider(_ provider: TTSProvider) async {
     guard provider != selectedProvider else { return }
 
@@ -73,7 +66,6 @@ final class AppState {
 
   // MARK: - Engine Operations
 
-  /// Load the current engine's model
   func loadEngine() async throws {
     try await engineManager.loadEngine()
   }
@@ -162,12 +154,12 @@ final class AppState {
   // MARK: - Private Helpers
 
   private func formatResultStatus(_ result: AudioResult) -> String {
-    let timeStr = String(format: "%.2f", result.processingTime)
+    let timeStr = result.processingTime.formatted(decimals: 2)
 
     if let duration = result.duration {
-      let durationStr = String(format: "%.2f", duration)
+      let durationStr = duration.formatted(decimals: 2)
       if let rtf = result.realTimeFactor {
-        let rtfStr = String(format: "%.2f", rtf)
+        let rtfStr = rtf.formatted(decimals: 2)
         return "Generated \(durationStr)s audio in \(timeStr)s (RTF: \(rtfStr)x)"
       }
       return "Generated \(durationStr)s audio in \(timeStr)s"

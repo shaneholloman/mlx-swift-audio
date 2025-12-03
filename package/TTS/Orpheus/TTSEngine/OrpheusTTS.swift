@@ -20,7 +20,7 @@ enum Profiler {
     let result = try block()
     let end = CFAbsoluteTimeGetCurrent()
     let duration = (end - start) * 1000 // Convert to milliseconds
-    Log.perf.debug("⏱️ [PROFILE] \(label): \(String(format: "%.2f", duration))ms")
+    Log.perf.debug("⏱️ [PROFILE] \(label): \(duration.formatted(decimals: 2)) ms")
     return result
   }
 
@@ -31,7 +31,7 @@ enum Profiler {
     let result = try await block()
     let end = CFAbsoluteTimeGetCurrent()
     let duration = (end - start) * 1000 // Convert to milliseconds
-    Log.perf.debug("⏱️ [PROFILE] \(label): \(String(format: "%.2f", duration))ms")
+    Log.perf.debug("⏱️ [PROFILE] \(label): \(duration.formatted(decimals: 2)) ms")
     return result
   }
 }
@@ -223,7 +223,7 @@ public actor OrpheusTTS {
       let samplingEnd = Profiler.enabled ? CFAbsoluteTimeGetCurrent() : 0
       let samplingDuration = Profiler.enabled ? (samplingEnd - samplingStart) * 1000 : 0
       if Profiler.enabled {
-        Log.perf.debug("⏱️ [PROFILE] Token sampling (iter \(i)): \(String(format: "%.2f", samplingDuration))ms")
+        Log.perf.debug("⏱️ [PROFILE] Token sampling (iter \(i)): \(samplingDuration.formatted(decimals: 2)) ms")
       }
 
       // Only extract the Int32 value when we absolutely need it for CPU operations
@@ -266,7 +266,7 @@ public actor OrpheusTTS {
       let forwardPassEnd = Profiler.enabled ? CFAbsoluteTimeGetCurrent() : 0
       let forwardPassDuration = Profiler.enabled ? (forwardPassEnd - forwardPassStart) * 1000 : 0
       if Profiler.enabled {
-        Log.perf.debug("⏱️ [PROFILE] Forward pass (iter \(i)): \(String(format: "%.2f", forwardPassDuration))ms")
+        Log.perf.debug("⏱️ [PROFILE] Forward pass (iter \(i)): \(forwardPassDuration.formatted(decimals: 2)) ms")
       }
 
       // Clear GPU cache periodically
@@ -282,8 +282,8 @@ public actor OrpheusTTS {
 
         // Print detailed timing every 10 iterations or for first 5
         if i < 5 || i % 10 == 0 {
-          Log.perf.debug("  🔀 Iteration \(i): \(String(format: "%.2f", iterationDuration))ms total")
-          Log.perf.debug("    📊 Forward: \(String(format: "%.2f", forwardPassDuration))ms")
+          Log.perf.debug("  🔀 Iteration \(i): \(iterationDuration.formatted(decimals: 2)) ms total")
+          Log.perf.debug("    📊 Forward: \(forwardPassDuration.formatted(decimals: 2)) ms")
           Log.perf.debug("    🎯 Token: \(next_token)")
         }
       }
@@ -307,7 +307,7 @@ public actor OrpheusTTS {
 
     let totalGenerationEnd = CFAbsoluteTimeGetCurrent()
     let totalDuration = (totalGenerationEnd - totalGenerationStart) * 1000
-    Log.perf.info("🏁 [PROFILE] Total audio generation: \(String(format: "%.2f", totalDuration))ms")
+    Log.perf.info("🏁 [PROFILE] Total audio generation: \(totalDuration.formatted(decimals: 2)) ms")
 
     waveform.eval()
     return waveform.asArray(Float.self)
@@ -404,7 +404,7 @@ public actor OrpheusTTS {
     if Profiler.enabled {
       let samplingEnd = CFAbsoluteTimeGetCurrent()
       let samplingDuration = (samplingEnd - samplingStart) * 1000
-      Log.perf.debug("  🎲 Sampling total: \(String(format: "%.2f", samplingDuration))ms")
+      Log.perf.debug("  🎲 Sampling total: \(samplingDuration.formatted(decimals: 2)) ms")
     }
 
     return nextTokenIdArray

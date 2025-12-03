@@ -44,7 +44,7 @@ actor Timing {
   }
 
   var deltaInSec: String {
-    String(format: "%.4f", Double(delta) / 1_000_000_000)
+    (Double(delta) / 1_000_000_000).formatted(decimals: 4)
   }
 }
 

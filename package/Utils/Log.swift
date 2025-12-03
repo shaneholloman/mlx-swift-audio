@@ -35,16 +35,24 @@ public enum Log {
   public static let perf = Logger(subsystem: subsystem, category: "performance")
 }
 
-// MARK: - Convenience Extensions
+// MARK: - Formatting Extensions
+
+public extension BinaryFloatingPoint {
+  func formatted(decimals: Int) -> String {
+    Double(self).formatted(.number.precision(.fractionLength(decimals)))
+  }
+}
+
+// MARK: - Logger Extensions
 
 extension Logger {
   /// Log a timing measurement
   func timing(_ label: String, duration: TimeInterval) {
-    info("\(label): \(String(format: "%.3f", duration))s")
+    info("\(label): \(duration.formatted(decimals: 3))s")
   }
 
   /// Log a real-time factor
   func rtf(_ label: String, rtf: Double) {
-    info("\(label) RTF: \(String(format: "%.2f", rtf))x")
+    info("\(label) RTF: \(rtf.formatted(decimals: 2))x")
   }
 }

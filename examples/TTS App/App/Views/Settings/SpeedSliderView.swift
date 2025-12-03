@@ -14,7 +14,7 @@ struct SpeedSliderView: View {
 
         Spacer()
 
-        Text(String(format: "%.1fx", speed))
+        Text("\(speed.formatted(decimals: 1))x")
           .font(.caption)
           .foregroundStyle(.secondary)
           .monospacedDigit()
@@ -45,7 +45,7 @@ struct SpeedSliderView: View {
               speed = Float(preset)
             }
           } label: {
-            Text(String(format: "%.1fx", preset))
+            Text("\(preset.formatted(decimals: 1))x")
               .font(.caption)
               .padding(.horizontal, 8)
               .padding(.vertical, 4)

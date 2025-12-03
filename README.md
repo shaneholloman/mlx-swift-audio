@@ -63,6 +63,6 @@ xcodebuild -project 'examples/TTS App/TTS App.xcodeproj' -scheme 'TTS App' -dest
 - **Marvis**: Streaming audio generation
 - **OuteTTS**: Custom voices with reference audio
 
-## History of this repository
+## History
 
 Commit [22b498c](https://github.com/DePasqualeOrg/mlx-swift-audio/commit/22b498ceaf01fa2ee138bb36c62799172efbd6ab) in this repository corresponds to commit [0ee931b](https://github.com/DePasqualeOrg/mlx-audio/commit/0ee931b6971a338f7c48176a86db217a434a0036) ([PR #279](https://github.com/Blaizzy/mlx-audio/pull/279)) in [Blaizzy/mlx-audio](https://github.com/Blaizzy/mlx-audio), in which the Swift library and example app were completely rewritten. The commit history of files from mlx-audio has been preserved.
