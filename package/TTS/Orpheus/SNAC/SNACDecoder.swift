@@ -3,6 +3,17 @@ import Hub
 import MLX
 import MLXNN
 
+enum SNACDecoderError: LocalizedError {
+  case invalidConfigJSON
+
+  var errorDescription: String? {
+    switch self {
+      case .invalidConfigJSON:
+        "Invalid SNAC config JSON"
+    }
+  }
+}
+
 class SNACDecoder {
   private let weights: [String: MLXArray]
   private let config: SNACConfig
@@ -132,7 +143,7 @@ class SNACDecoder {
   static func loadConfig(from url: URL) throws -> SNACConfig {
     let data = try Data(contentsOf: url)
     guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-      throw NSError(domain: "SNACDecoder", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid config JSON"])
+      throw SNACDecoderError.invalidConfigJSON
     }
 
     return SNACConfig(

@@ -9,6 +9,27 @@
 import AVFoundation
 import Foundation
 
+/// Errors that can occur during audio file writing
+enum AudioFileWriterError: LocalizedError {
+  case formatCreationFailed
+  case bufferCreationFailed
+  case channelDataAccessFailed
+  case combinedBufferCreationFailed
+
+  var errorDescription: String? {
+    switch self {
+      case .formatCreationFailed:
+        "Failed to create audio format"
+      case .bufferCreationFailed:
+        "Failed to create audio buffer"
+      case .channelDataAccessFailed:
+        "Failed to get channel data"
+      case .combinedBufferCreationFailed:
+        "Failed to create combined buffer"
+    }
+  }
+}
+
 /// Audio file format options
 enum AudioFileFormat {
   case wav
@@ -61,11 +82,7 @@ enum AudioFileWriter {
       standardFormatWithSampleRate: Double(sampleRate),
       channels: 1,
     ) else {
-      throw TTSError.fileIOError(underlying: NSError(
-        domain: "AudioFileWriter",
-        code: -1,
-        userInfo: [NSLocalizedDescriptionKey: "Failed to create audio format"],
-      ))
+      throw TTSError.fileIOError(underlying: AudioFileWriterError.formatCreationFailed)
     }
 
     // Create buffer
@@ -73,22 +90,14 @@ enum AudioFileWriter {
       pcmFormat: audioFormat,
       frameCapacity: AVAudioFrameCount(samples.count),
     ) else {
-      throw TTSError.fileIOError(underlying: NSError(
-        domain: "AudioFileWriter",
-        code: -2,
-        userInfo: [NSLocalizedDescriptionKey: "Failed to create audio buffer"],
-      ))
+      throw TTSError.fileIOError(underlying: AudioFileWriterError.bufferCreationFailed)
     }
 
     buffer.frameLength = AVAudioFrameCount(samples.count)
 
     // Copy samples to buffer
     guard let channelData = buffer.floatChannelData else {
-      throw TTSError.fileIOError(underlying: NSError(
-        domain: "AudioFileWriter",
-        code: -3,
-        userInfo: [NSLocalizedDescriptionKey: "Failed to get channel data"],
-      ))
+      throw TTSError.fileIOError(underlying: AudioFileWriterError.channelDataAccessFailed)
     }
 
     for i in 0 ..< samples.count {
@@ -142,11 +151,7 @@ enum AudioFileWriter {
       pcmFormat: audioFormat,
       frameCapacity: AVAudioFrameCount(totalFrames),
     ) else {
-      throw TTSError.fileIOError(underlying: NSError(
-        domain: "AudioFileWriter",
-        code: -4,
-        userInfo: [NSLocalizedDescriptionKey: "Failed to create combined buffer"],
-      ))
+      throw TTSError.fileIOError(underlying: AudioFileWriterError.combinedBufferCreationFailed)
     }
 
     combinedBuffer.frameLength = AVAudioFrameCount(totalFrames)

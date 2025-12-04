@@ -10,7 +10,7 @@ func loadAudioArray(from url: URL) throws -> (Double, MLXArray) {
   let inFormat = file.processingFormat
   let totalFrames = AVAudioFrameCount(file.length)
   guard let inBuffer = AVAudioPCMBuffer(pcmFormat: inFormat, frameCapacity: totalFrames) else {
-    throw NSError(domain: "WAVLoader", code: -1, userInfo: [NSLocalizedDescriptionKey: "Buffer alloc failed"])
+    throw AudioLoaderError.bufferAllocFailed
   }
   try file.read(into: inBuffer)
 
@@ -28,13 +28,13 @@ func loadAudioArray(from url: URL) throws -> (Double, MLXArray) {
                                   channels: inFormat.channelCount,
                                   interleaved: false)
   guard let floatFormat else {
-    throw NSError(domain: "WAVLoader", code: -3, userInfo: [NSLocalizedDescriptionKey: "Failed to create float format"])
+    throw AudioLoaderError.floatFormatCreationFailed
   }
   guard let converter = AVAudioConverter(from: inFormat, to: floatFormat) else {
-    throw NSError(domain: "WAVLoader", code: -4, userInfo: [NSLocalizedDescriptionKey: "Failed to create audio converter"])
+    throw AudioLoaderError.converterCreationFailed
   }
   guard let outBuffer = AVAudioPCMBuffer(pcmFormat: floatFormat, frameCapacity: totalFrames) else {
-    throw NSError(domain: "WAVLoader", code: -2, userInfo: [NSLocalizedDescriptionKey: "Out buffer alloc failed"])
+    throw AudioLoaderError.outputBufferAllocFailed
   }
 
   let consumed = Atomic<Bool>(false)
@@ -53,7 +53,7 @@ func loadAudioArray(from url: URL) throws -> (Double, MLXArray) {
 
   let frames = Int(outBuffer.frameLength)
   guard let floatChannelData = outBuffer.floatChannelData else {
-    throw NSError(domain: "WAVLoader", code: -5, userInfo: [NSLocalizedDescriptionKey: "Failed to get float channel data"])
+    throw AudioLoaderError.channelDataAccessFailed
   }
   let channels: [[Float]] = (0 ..< Int(floatFormat.channelCount)).map { c in
     let ptr = floatChannelData[c]
@@ -62,9 +62,33 @@ func loadAudioArray(from url: URL) throws -> (Double, MLXArray) {
   return (floatFormat.sampleRate, MLXArray(channels[0]))
 }
 
+enum AudioLoaderError: LocalizedError {
+  case bufferAllocFailed
+  case outputBufferAllocFailed
+  case floatFormatCreationFailed
+  case converterCreationFailed
+  case channelDataAccessFailed
+
+  var errorDescription: String? {
+    switch self {
+      case .bufferAllocFailed:
+        "Failed to allocate audio buffer"
+      case .outputBufferAllocFailed:
+        "Failed to allocate output buffer"
+      case .floatFormatCreationFailed:
+        "Failed to create float audio format"
+      case .converterCreationFailed:
+        "Failed to create audio converter"
+      case .channelDataAccessFailed:
+        "Failed to access float channel data"
+    }
+  }
+}
+
 enum WAVWriterError: LocalizedError {
   case noFrames
   case bufferAllocFailed
+  case formatCreationFailed
 
   var errorDescription: String? {
     switch self {
@@ -72,6 +96,8 @@ enum WAVWriterError: LocalizedError {
         "Audio has no frames to write"
       case .bufferAllocFailed:
         "Failed to allocate audio buffer"
+      case .formatCreationFailed:
+        "Failed to create audio format"
     }
   }
 }
@@ -81,7 +107,7 @@ func saveAudioArray(_ audio: MLXArray, sampleRate: Double, to url: URL) throws {
   guard frames > 0 else { throw WAVWriterError.noFrames }
 
   guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: AVAudioChannelCount(1), interleaved: false) else {
-    throw NSError(domain: "WAVWriter", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create audio format"])
+    throw WAVWriterError.formatCreationFailed
   }
   guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames)) else {
     throw WAVWriterError.bufferAllocFailed
