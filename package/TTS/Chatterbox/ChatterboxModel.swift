@@ -119,7 +119,7 @@ struct ChatterboxConditionals: @unchecked Sendable {
 /// - T3: LLaMA-based text-to-speech-token generator
 /// - S3Gen: Flow matching decoder with HiFi-GAN vocoder
 /// - VoiceEncoder: Speaker embedding extractor
-/// - S3Tokenizer: Speech tokenizer for reference audio
+/// - S3Tokenizer: Speech tokenizer for reference audio (loaded from separate repo)
 ///
 /// This class is a `Module` subclass because Chatterbox uses a single weight file that contains
 /// parameters for multiple sub-models. The MLX `Module` system's `@ModuleInfo` property wrappers
@@ -133,6 +133,9 @@ struct ChatterboxConditionals: @unchecked Sendable {
 class ChatterboxModel: Module {
   /// Default Hugging Face repository for Chatterbox TTS (4-bit quantized)
   static let defaultRepoId = "mlx-community/Chatterbox-TTS-4bit"
+
+  /// Hugging Face repository for S3TokenizerV2 (shared across TTS models)
+  static let s3TokenizerRepoId = "mlx-community/S3TokenizerV2"
 
   /// Encoder conditioning length (6 seconds at 16kHz)
   static let encCondLen = 6 * ChatterboxS3Sr
@@ -192,11 +195,17 @@ class ChatterboxModel: Module {
   /// Some keys like `freqs_cis` and `trim_fade` are computed buffers that are not trainable
   /// and should not be loaded from weights.
   /// `embed_tokens` is skipped because T3 uses custom text_emb/speech_emb instead.
+  /// `s3_tokenizer.*` keys are skipped because S3Tokenizer is loaded from a separate repo.
   /// Also renames BatchNorm weight/bias to gamma/beta for MLX compatibility.
   private static func sanitizeWeights(_ weights: [String: MLXArray]) -> [String: MLXArray] {
     var sanitized: [String: MLXArray] = [:]
 
     for (key, value) in weights {
+      // Skip S3Tokenizer weights - loaded from separate repo (mlx-community/S3TokenizerV2)
+      if key.hasPrefix("s3_tokenizer.") {
+        continue
+      }
+
       // Skip computed buffers that are generated during initialization
       // (see Python: strict=False because of rand_noise, pos_enc.pe, stft_window, trim_fade)
       if key.contains("freqsCis") || key.contains("freqs_cis") {
@@ -314,25 +323,39 @@ class ChatterboxModel: Module {
 
   /// Load Chatterbox TTS model from Hugging Face Hub
   ///
+  /// Loads the main model weights (T3, S3Gen, VoiceEncoder) from the Chatterbox repo
+  /// and the S3Tokenizer weights from a separate shared repo.
+  ///
   /// - Parameters:
   ///   - repoId: Hugging Face repository ID (default: mlx-community/Chatterbox-TTS-4bit)
+  ///   - s3TokenizerRepoId: Hugging Face repository ID for S3Tokenizer (default: mlx-community/S3TokenizerV2)
   ///   - progressHandler: Optional callback for download progress
   /// - Returns: Initialized ChatterboxModel with loaded weights
   static func load(
     repoId: String = defaultRepoId,
+    s3TokenizerRepoId: String = s3TokenizerRepoId,
     progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
   ) async throws -> ChatterboxModel {
-    // Download model files from Hub
-    let modelDirectory = try await Hub.snapshot(
+    // Download both repos in parallel
+    Log.model.info("Loading Chatterbox from \(repoId) and S3Tokenizer from \(s3TokenizerRepoId)...")
+
+    async let modelDirectoryTask = Hub.snapshot(
       from: repoId,
       matching: ["model.safetensors", "tokenizer.json", "config.json"],
       progressHandler: progressHandler,
     )
 
-    // Load weights and sanitize (remove computed buffers like freqs_cis)
+    async let s3TokenizerDirectoryTask = Hub.snapshot(
+      from: s3TokenizerRepoId,
+      matching: ["model.safetensors", "config.json"],
+      progressHandler: progressHandler,
+    )
+
+    let (modelDirectory, s3TokenizerDirectory) = try await (modelDirectoryTask, s3TokenizerDirectoryTask)
+
+    // Load Chatterbox weights and sanitize (remove computed buffers like freqs_cis)
     let weightFileURL = modelDirectory.appending(path: "model.safetensors")
     let rawWeights = try MLX.loadArrays(url: weightFileURL)
-
     let weights = sanitizeWeights(rawWeights)
 
     // Initialize model
@@ -350,9 +373,22 @@ class ChatterboxModel: Module {
       }
     }
 
-    // Load weights into model
+    // Load Chatterbox weights into model (T3, S3Gen, VE - excludes s3_tokenizer)
     let parameters = ModuleParameters.unflattened(weights)
-    try model.update(parameters: parameters, verify: [.all])
+    try model.update(parameters: parameters, verify: [.noUnusedKeys])
+
+    // Load S3Tokenizer weights separately
+    let s3TokenizerWeightURL = s3TokenizerDirectory.appending(path: "model.safetensors")
+    let s3TokenizerRawWeights = try MLX.loadArrays(url: s3TokenizerWeightURL)
+
+    // Add s3_tokenizer prefix for the Module system
+    var s3TokenizerWeights: [String: MLXArray] = [:]
+    for (key, value) in s3TokenizerRawWeights {
+      s3TokenizerWeights["s3_tokenizer.\(key)"] = value
+    }
+
+    let s3TokenizerParameters = ModuleParameters.unflattened(s3TokenizerWeights)
+    try model.update(parameters: s3TokenizerParameters, verify: [.noUnusedKeys])
 
     // Set to eval mode for inference (important for BatchNorm to use running stats)
     model.train(false)
