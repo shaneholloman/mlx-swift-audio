@@ -1,10 +1,4 @@
-//
-//  Attention.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/transformer/attention.py
 //  Multi-head attention modules for Conformer encoder
-//
 
 import Foundation
 import MLX

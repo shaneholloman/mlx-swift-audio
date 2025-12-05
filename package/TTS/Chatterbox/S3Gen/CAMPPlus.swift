@@ -1,10 +1,4 @@
-//
-//  CAMPPlus.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/xvector.py
 //  CAM++ speaker embedding model
-//
 
 import Foundation
 import MLX

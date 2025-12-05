@@ -1,10 +1,3 @@
-//
-//  ChatterboxTests.swift
-//  MLXAudioTests
-//
-//  Tests for Chatterbox TTS model pipeline.
-//
-
 import Foundation
 import MLX
 import Testing
@@ -94,10 +87,10 @@ struct ChatterboxTests {
     print("Multiple speaker test passed!")
   }
 
-  @Test func chatterboxTTSDirectLoad() async throws {
-    print("Testing direct ChatterboxTTS.load()...")
+  @Test func chatterboxModelDirectLoad() async throws {
+    print("Testing direct ChatterboxModel.load()...")
 
-    let model = try await ChatterboxTTS.load { progress in
+    let model = try await ChatterboxModel.load { progress in
       if progress.fractionCompleted.truncatingRemainder(dividingBy: 0.1) < 0.01 {
         print("Loading: \(Int(progress.fractionCompleted * 100))%")
       }
@@ -110,9 +103,8 @@ struct ChatterboxTests {
     _ = model.t3
     _ = model.s3gen
     _ = model.ve
-    #expect(model.s3Tokenizer != nil)
     #expect(model.textTokenizer != nil)
 
-    print("ChatterboxTTS direct load test passed!")
+    print("ChatterboxModel direct load test passed!")
   }
 }

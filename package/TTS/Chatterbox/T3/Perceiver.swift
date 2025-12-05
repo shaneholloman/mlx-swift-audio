@@ -1,10 +1,3 @@
-//
-//  Perceiver.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/t3/perceiver.py
-//
-
 import Foundation
 import MLX
 import MLXFast

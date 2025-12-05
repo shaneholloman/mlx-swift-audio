@@ -1,10 +1,4 @@
-//
-//  HiFiGAN.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/hifigan.py
 //  HiFi-GAN vocoder with Neural Source Filter for speech synthesis
-//
 
 import Foundation
 import MLX

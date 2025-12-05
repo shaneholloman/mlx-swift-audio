@@ -1,10 +1,4 @@
-//
-//  PositionwiseFeedForward.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/transformer/positionwise_feed_forward.py
 //  Feed forward module for Conformer encoder
-//
 
 import Foundation
 import MLX

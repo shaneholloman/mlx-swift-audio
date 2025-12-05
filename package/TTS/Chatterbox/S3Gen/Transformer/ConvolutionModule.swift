@@ -1,10 +1,4 @@
-//
-//  ConvolutionModule.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/transformer/convolution.py
 //  Convolution module for Conformer encoder
-//
 
 import Foundation
 import MLX

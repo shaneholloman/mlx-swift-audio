@@ -1,11 +1,3 @@
-//
-//  AudioSamplePlayer.swift
-//  MLXAudio
-//
-//  Plays raw audio samples using AVAudioEngine.
-//  Used by TTS engines to play generated audio.
-//
-
 @preconcurrency import AVFoundation
 import Foundation
 

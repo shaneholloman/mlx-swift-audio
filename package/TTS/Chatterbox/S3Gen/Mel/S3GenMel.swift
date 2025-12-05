@@ -1,10 +1,3 @@
-//
-//  S3GenMel.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/mel.py
-//
-
 import Foundation
 import MLX
 import MLXFFT

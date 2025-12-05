@@ -1,10 +1,3 @@
-//
-//  SwiGLUMLP.swift
-//  MLXAudio
-//
-//  Unified SwiGLU MLP implementation for Llama-style transformers.
-//
-
 import Foundation
 import MLX
 import MLXNN

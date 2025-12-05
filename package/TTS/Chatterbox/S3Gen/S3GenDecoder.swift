@@ -1,10 +1,4 @@
-//
-//  S3GenDecoder.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/decoder.py
 //  Conditional U-Net decoder for flow matching
-//
 
 import Foundation
 import MLX

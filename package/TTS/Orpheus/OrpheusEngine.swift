@@ -1,11 +1,3 @@
-//
-//  OrpheusEngine.swift
-//  MLXAudio
-//
-//  Orpheus TTS engine conforming to TTSEngine protocol.
-//  Wraps the existing OrpheusTTS implementation.
-//
-
 import Foundation
 
 /// Orpheus TTS engine - high quality with emotional expressions

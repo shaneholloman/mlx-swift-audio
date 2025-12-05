@@ -1,10 +1,3 @@
-//
-//  VoiceEncoderMelspec.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/voice_encoder/melspec.py
-//
-
 import Foundation
 import MLX
 import MLXNN

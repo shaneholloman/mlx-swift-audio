@@ -1,11 +1,3 @@
-//
-//  OuteTTSEngine+Public.swift
-//  MLXAudio
-//
-//  OuteTTS engine conforming to TTSEngine protocol.
-//  Wraps the OuteTTSEngine actor implementation.
-//
-
 import Foundation
 
 /// OuteTTS engine - TTS with custom speaker profiles
@@ -36,8 +28,6 @@ public final class OuteTTSEngine: TTSEngine {
   @ObservationIgnored private var outeTTS: OuteTTS?
   @ObservationIgnored private let audioPlayer = AudioSamplePlayer(sampleRate: TTSProvider.outetts.sampleRate)
   @ObservationIgnored private var generationTask: Task<Void, Never>?
-
-  private static let sampleRate = TTSProvider.outetts.sampleRate
 
   // MARK: - Initialization
 
@@ -159,7 +149,7 @@ public final class OuteTTSEngine: TTSEngine {
       do {
         let fileURL = try AudioFileWriter.save(
           samples: result.audio,
-          sampleRate: Self.sampleRate,
+          sampleRate: provider.sampleRate,
           filename: TTSConstants.outputFilename,
         )
         lastGeneratedAudioURL = fileURL
@@ -169,7 +159,7 @@ public final class OuteTTSEngine: TTSEngine {
 
       return .samples(
         data: result.audio,
-        sampleRate: Self.sampleRate,
+        sampleRate: provider.sampleRate,
         processingTime: generationTime,
       )
 

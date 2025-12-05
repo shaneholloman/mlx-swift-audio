@@ -1,11 +1,4 @@
-//
-//  FlowMatching.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/flow_matching.py
-//  and mlx_audio/tts/models/chatterbox/s3gen/matcha/flow_matching.py
 //  Conditional Flow Matching for speech synthesis
-//
 
 import Foundation
 import MLX

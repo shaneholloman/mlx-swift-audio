@@ -1,10 +1,4 @@
-//
-//  OuteTTSPromptProcessor.swift
-//  MLXAudio
-//
 //  Prompt processing for OuteTTS text-to-speech
-//  Ported from: mlx_audio/tts/models/outetts/prompt_processor.py
-//
 
 import Foundation
 

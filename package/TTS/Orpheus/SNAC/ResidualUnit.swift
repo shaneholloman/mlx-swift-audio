@@ -1,9 +1,3 @@
-//
-//  ResidualUnit.swift
-//  MLXAudio
-//
-//  ResidualUnit for SNAC decoder - residual block with snake activations
-//
 import Foundation
 import MLX
 import MLXNN

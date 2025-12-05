@@ -1,11 +1,3 @@
-//
-//  AudioFilePlayer.swift
-//  MLXAudio
-//
-//  Plays audio files using AVPlayer.
-//  Used by views for replaying saved audio with progress tracking.
-//
-
 import AVFoundation
 import Foundation
 

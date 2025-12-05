@@ -1,10 +1,3 @@
-//
-//  S3TokenizerConfig.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/codec/models/s3/
-//
-
 import Foundation
 
 /// S3Tokenizer constants

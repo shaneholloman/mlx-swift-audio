@@ -1,10 +1,3 @@
-//
-//  Log.swift
-//  MLXAudio
-//
-//  Structured logging utilities using os.log.
-//
-
 import Foundation
 import os
 

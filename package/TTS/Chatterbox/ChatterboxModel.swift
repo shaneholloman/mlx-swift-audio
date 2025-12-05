@@ -1,10 +1,4 @@
-//
-//  ChatterboxModel.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/chatterbox.py
 //  Main Chatterbox model (Module-based neural network)
-//
 
 import Foundation
 import Hub

@@ -1,10 +1,4 @@
-//
-//  F0Predictor.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/f0_predictor.py
 //  Convolutional F0 (fundamental frequency / pitch) predictor
-//
 
 import Foundation
 import MLX

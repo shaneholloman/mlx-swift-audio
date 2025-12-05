@@ -1,10 +1,3 @@
-//
-//  AudioSessionManager.swift
-//  MLXAudio
-//
-//  iOS-specific audio session management
-//
-
 #if os(iOS)
 import AVFoundation
 

@@ -1,10 +1,3 @@
-//
-//  AudioResult.swift
-//  MLXAudio
-//
-//  Represents the result of TTS audio generation.
-//
-
 import Foundation
 
 /// Audio generation results are either in-memory samples (for streaming/playback)

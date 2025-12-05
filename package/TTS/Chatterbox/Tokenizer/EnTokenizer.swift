@@ -1,10 +1,4 @@
-//
-//  EnTokenizer.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/tokenizer.py
 //  English text tokenizer for Chatterbox TTS
-//
 
 import Foundation
 import MLX

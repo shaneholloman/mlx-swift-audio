@@ -6,7 +6,6 @@ import Foundation
 import MLXRandom
 
 // Orpheus TTS - Swift implementation of the Orpheus 3B model
-// Python equivalent: mlx_audio/tts/models/llama/llama.py
 
 // MARK: - Profiling Helper
 

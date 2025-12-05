@@ -1,10 +1,3 @@
-//
-//  LearnedPositionEmbeddings.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/t3/learned_pos_emb.py
-//
-
 import Foundation
 import MLX
 import MLXNN

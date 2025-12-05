@@ -1,9 +1,3 @@
-//
-//  SNACConfig.swift
-//  MLXAudio
-//
-//  Created by Ben Harraway on 14/05/2025.
-//
 import Foundation
 
 struct SNACConfig: Codable {

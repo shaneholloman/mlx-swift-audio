@@ -1,10 +1,3 @@
-//
-//  T3CondEnc.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/t3/cond_enc.py
-//
-
 import Foundation
 import MLX
 import MLXNN

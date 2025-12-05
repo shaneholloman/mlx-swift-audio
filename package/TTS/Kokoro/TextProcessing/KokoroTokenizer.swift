@@ -1,8 +1,3 @@
-//
-//  KokoroTokenizer.swift
-//   MLXAudio
-//
-
 import Accelerate
 import Foundation
 

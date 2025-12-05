@@ -1,11 +1,3 @@
-//
-//  TTSProvider.swift
-//  MLXAudio
-//
-//  Unified TTS provider enum for all platforms.
-//  Single source of truth for provider selection and configuration.
-//
-
 import Foundation
 
 /// Available TTS providers

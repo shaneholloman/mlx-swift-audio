@@ -1,10 +1,5 @@
-//
-//  ChatterboxLSTM.swift
-//  MLXAudio
-//
-//  Multi-layer unidirectional LSTM for Chatterbox VoiceEncoder.
-//  Uses MLX weight format after sanitization from PyTorch.
-//
+// Multi-layer unidirectional LSTM for Chatterbox VoiceEncoder.
+// Uses MLX weight format after sanitization from PyTorch.
 
 import Foundation
 import MLX

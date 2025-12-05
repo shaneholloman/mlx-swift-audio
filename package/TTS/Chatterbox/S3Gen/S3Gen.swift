@@ -1,10 +1,4 @@
-//
-//  S3Gen.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/s3gen.py
 //  S3Gen decoder: converts speech tokens to waveforms
-//
 
 import Foundation
 import MLX

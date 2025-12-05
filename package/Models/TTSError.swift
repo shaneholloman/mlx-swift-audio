@@ -1,10 +1,3 @@
-//
-//  TTSError.swift
-//  MLXAudio
-//
-//  Unified error handling across all TTS engines.
-//
-
 import Foundation
 
 /// Unified error type for all TTS operations

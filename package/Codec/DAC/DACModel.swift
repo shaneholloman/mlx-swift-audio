@@ -1,10 +1,4 @@
-//
-//  DACModel.swift
-//  MLXAudio
-//
 //  DAC (Descript Audio Codec) encoder and decoder
-//  Ported from: mlx_audio/codec/models/descript/dac.py
-//
 
 import Foundation
 import Hub

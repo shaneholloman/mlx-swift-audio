@@ -1,10 +1,4 @@
-//
-//  MatchaTransformer.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/matcha/transformer.py
 //  Transformer components for flow matching decoder
-//
 
 import Foundation
 import MLX

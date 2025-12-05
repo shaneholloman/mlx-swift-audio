@@ -1,10 +1,3 @@
-//
-//  ChatterboxTTS.swift
-//  MLXAudio
-//
-//  Actor wrapper for ChatterboxModel to enable thread-safe generation.
-//
-
 import Foundation
 import MLX
 

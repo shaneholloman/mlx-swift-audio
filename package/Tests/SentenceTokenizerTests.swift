@@ -1,8 +1,3 @@
-//
-//  SentenceTokenizerTests.swift
-//   MLXAudio
-//
-
 import Foundation
 import NaturalLanguage
 import XCTest

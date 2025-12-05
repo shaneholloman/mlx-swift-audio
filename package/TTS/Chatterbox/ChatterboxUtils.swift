@@ -1,10 +1,3 @@
-//
-//  ChatterboxUtils.swift
-//  MLXAudio
-//
-//  Shared utility functions for Chatterbox TTS model
-//
-
 import Foundation
 import MLX
 

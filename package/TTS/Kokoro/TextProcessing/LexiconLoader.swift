@@ -1,10 +1,3 @@
-//
-//  LexiconLoader.swift
-//  MLXAudio
-//
-//  Downloads and caches lexicon files from the misaki GitHub repository.
-//
-
 import Foundation
 
 /// Utility class for loading lexicon files from GitHub.

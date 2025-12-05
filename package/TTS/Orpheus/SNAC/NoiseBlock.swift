@@ -1,9 +1,3 @@
-//
-//  NoiseBlock.swift
-//  MLXAudio
-//
-//  NoiseBlock for SNAC decoder - adds learned noise modulation
-//
 import Foundation
 import MLX
 import MLXNN

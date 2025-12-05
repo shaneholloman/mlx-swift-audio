@@ -1,9 +1,3 @@
-//
-//  ConvWeightedTranspose1d.swift
-//  MLXAudio
-//
-//  ConvTranspose1d with weight normalization for SNAC decoder
-//
 import Foundation
 import MLX
 import MLXNN

@@ -1,11 +1,3 @@
-//
-//  AudioFileWriter.swift
-//  MLXAudio
-//
-//  Consolidated audio file saving utilities.
-//  Replaces duplicate implementations across TTS engines.
-//
-
 import AVFoundation
 import Foundation
 

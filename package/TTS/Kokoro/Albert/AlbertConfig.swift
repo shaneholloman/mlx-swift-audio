@@ -1,6 +1,3 @@
-//
-//  Kokoro-tts-lib
-//
 import Foundation
 
 struct AlbertConfig {

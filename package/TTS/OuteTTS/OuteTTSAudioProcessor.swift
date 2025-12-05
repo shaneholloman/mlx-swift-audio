@@ -1,10 +1,4 @@
-//
-//  OuteTTSAudioProcessor.swift
-//  MLXAudio
-//
 //  Audio processing and feature extraction for OuteTTS speaker profiles
-//  Ported from: mlx_audio/tts/models/outetts/audio_processor.py
-//
 
 import Accelerate
 import Foundation

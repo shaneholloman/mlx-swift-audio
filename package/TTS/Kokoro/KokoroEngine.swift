@@ -1,11 +1,3 @@
-//
-//  KokoroEngine.swift
-//  MLXAudio
-//
-//  Kokoro TTS engine conforming to TTSEngine protocol.
-//  Wraps the existing KokoroTTS implementation.
-//
-
 import AVFoundation
 import Foundation
 

@@ -1,10 +1,3 @@
-//
-//  ChatterboxConfig.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/config.py
-//
-
 import Foundation
 
 /// LLaMA 520M configuration for T3 backbone

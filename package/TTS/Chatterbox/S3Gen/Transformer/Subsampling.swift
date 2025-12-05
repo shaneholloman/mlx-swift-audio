@@ -1,10 +1,4 @@
-//
-//  Subsampling.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/transformer/subsampling.py
 //  Subsampling modules for Conformer encoder
-//
 
 import Foundation
 import MLX

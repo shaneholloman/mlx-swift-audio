@@ -1,10 +1,3 @@
-//
-//  TTSEngine.swift
-//  MLXAudio
-//
-//  Protocol-oriented foundation for all TTS engines.
-//
-
 import Foundation
 
 /// Core protocol that all TTS engines must conform to.

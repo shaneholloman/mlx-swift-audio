@@ -1,10 +1,3 @@
-//
-//  Voice.swift
-//  MLXAudio
-//
-//  Unified voice model for all TTS engines.
-//
-
 import Foundation
 
 /// Represents a voice option for TTS engines

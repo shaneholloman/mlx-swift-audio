@@ -1,10 +1,4 @@
-//
-//  UpsampleConformerEncoder.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/transformer/upsample_encoder.py
 //  Conformer encoder with upsampling for speech synthesis
-//
 
 import Foundation
 import MLX

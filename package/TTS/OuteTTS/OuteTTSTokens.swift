@@ -1,10 +1,4 @@
-//
-//  OuteTTSTokens.swift
-//  MLXAudio
-//
 //  Special tokens for OuteTTS text and audio processing
-//  Ported from: mlx_audio/tts/models/outetts/tokens.py
-//
 
 import Foundation
 

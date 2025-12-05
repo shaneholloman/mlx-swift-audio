@@ -1,10 +1,4 @@
-//
-//  ConformerEncoderLayer.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/transformer/encoder_layer.py
 //  Conformer encoder layer module
-//
 
 import Foundation
 import MLX

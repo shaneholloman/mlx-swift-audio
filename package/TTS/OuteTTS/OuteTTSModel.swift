@@ -1,9 +1,3 @@
-//
-//  OuteTTSModel.swift
-//  MLXAudio
-//
-//  Custom Llama model for OuteTTS
-
 import Foundation
 import MLX
 import MLXFast

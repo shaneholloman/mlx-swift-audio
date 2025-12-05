@@ -1,10 +1,4 @@
-//
-//  DACQuantize.swift
-//  MLXAudio
-//
 //  DAC Vector Quantization layers
-//  Ported from: mlx_audio/codec/models/descript/nn/quantize.py
-//
 
 import Foundation
 import MLX

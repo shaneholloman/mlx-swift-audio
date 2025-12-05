@@ -1,11 +1,3 @@
-//
-//  Llama3RoPE.swift
-//  MLXAudio
-//
-//  Unified Llama3-style Rotary Position Embedding implementation.
-//  Uses MLXFast.RoPE for optimized computation.
-//
-
 import Foundation
 import MLX
 import MLXFast

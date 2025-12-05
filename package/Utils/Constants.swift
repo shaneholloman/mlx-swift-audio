@@ -1,10 +1,3 @@
-//
-//  Constants.swift
-//  MLXAudio
-//
-//  Centralized constants for magic numbers and configuration values.
-//
-
 import Foundation
 
 /// TTS library constants

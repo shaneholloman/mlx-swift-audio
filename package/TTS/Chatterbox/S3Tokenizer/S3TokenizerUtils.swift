@@ -1,10 +1,3 @@
-//
-//  S3TokenizerUtils.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/codec/models/s3/utils.py
-//
-
 import Foundation
 import MLX
 import MLXFFT

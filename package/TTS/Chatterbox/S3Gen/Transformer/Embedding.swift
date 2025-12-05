@@ -1,10 +1,4 @@
-//
-//  Embedding.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/transformer/embedding.py
 //  Positional encoding modules for Conformer encoder
-//
 
 import Foundation
 import MLX

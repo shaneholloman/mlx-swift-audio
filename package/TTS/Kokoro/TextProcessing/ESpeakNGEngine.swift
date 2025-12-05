@@ -1,8 +1,3 @@
-//
-//  ESpeakNGEngine.swift
-//  Kokoro-tts-lib
-//
-
 import Foundation
 import libespeak_ng
 

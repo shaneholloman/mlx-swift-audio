@@ -1,10 +1,3 @@
-//
-//  OuteTTS.swift
-//  MLXAudio
-//
-//  Ported from: mlx_audio/tts/models/outetts/outetts.py
-//
-
 import Foundation
 import Hub
 @preconcurrency import MLX

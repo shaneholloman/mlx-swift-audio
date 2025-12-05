@@ -1,9 +1,3 @@
-//
-//  WNConv1d.swift
-//  MLXAudio
-//
-//  Weight-normalized Conv1d for SNAC decoder
-//
 import Foundation
 import MLX
 import MLXNN

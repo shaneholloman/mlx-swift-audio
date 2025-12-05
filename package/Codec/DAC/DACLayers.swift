@@ -1,10 +1,4 @@
-//
-//  DACLayers.swift
-//  MLXAudio
-//
 //  DAC (Descript Audio Codec) neural network layers
-//  Ported from: mlx_audio/codec/models/descript/nn/layers.py
-//
 
 import Foundation
 import MLX

@@ -1,8 +1,3 @@
-//
-//  SentenceTokenizer.swift
-//   MLXAudio
-//
-
 import Foundation
 @preconcurrency import NaturalLanguage
 

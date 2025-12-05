@@ -1,11 +1,3 @@
-//
-//  ChatterboxEngine.swift
-//  MLXAudio
-//
-//  Chatterbox TTS engine conforming to TTSEngine protocol.
-//  TTS with reference audio support.
-//
-
 import AVFoundation
 import Foundation
 import MLX
@@ -400,14 +392,14 @@ public final class ChatterboxEngine: TTSEngine {
 
       isGenerating = false
 
-      let audioDuration = Double(samples.count) / Double(ChatterboxS3GenSr)
+      let audioDuration = Double(samples.count) / Double(provider.sampleRate)
       let rtf = generationTime / audioDuration
       Log.tts.rtf("Chatterbox", rtf: rtf)
 
       do {
         let fileURL = try AudioFileWriter.save(
           samples: samples,
-          sampleRate: ChatterboxS3GenSr,
+          sampleRate: provider.sampleRate,
           filename: TTSConstants.outputFilename,
         )
         lastGeneratedAudioURL = fileURL
@@ -417,7 +409,7 @@ public final class ChatterboxEngine: TTSEngine {
 
       return .samples(
         data: samples,
-        sampleRate: ChatterboxS3GenSr,
+        sampleRate: provider.sampleRate,
         processingTime: generationTime,
       )
 

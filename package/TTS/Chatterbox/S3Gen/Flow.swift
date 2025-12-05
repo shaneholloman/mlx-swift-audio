@@ -1,10 +1,4 @@
-//
-//  Flow.swift
-//  MLXAudio
-//
-//  Ported from mlx_audio/tts/models/chatterbox/s3gen/flow.py
 //  Causal masked diffusion model with speaker embeddings
-//
 
 import Foundation
 import MLX

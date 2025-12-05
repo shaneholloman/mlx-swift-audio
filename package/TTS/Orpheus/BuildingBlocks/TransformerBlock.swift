@@ -1,9 +1,3 @@
-//
-//  TransformerBlock.swift
-//  MLXAudio
-//
-//  Created by Ben Harraway on 21/05/2025.
-//
 import Foundation
 import MLX
 import MLXFast
