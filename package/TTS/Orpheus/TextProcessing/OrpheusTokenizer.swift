@@ -203,8 +203,6 @@ class OrpheusTokenizer {
       }
     }
     currentSymbols = initialSymbolsForBPE
-    // print("Initial symbols with space handling: \(currentSymbols)") // Already confirmed by user
-
     // Apply BPE merges based on rank priority - one merge at a time
     while true {
       // Find the highest-priority merge rule that applies to any adjacent pair in currentSymbols.
