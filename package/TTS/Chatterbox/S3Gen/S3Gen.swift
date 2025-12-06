@@ -17,7 +17,10 @@ let SpeechVocabSize = 6561
 
 // MARK: - Reference Dictionary
 
-/// Container for reference audio embeddings
+/// Container for reference audio embeddings.
+///
+/// Marked `@unchecked Sendable` because it contains non-Sendable MLXArray fields,
+/// but all access is controlled within the `ChatterboxTTS` actor's methods.
 struct S3GenRefDict: @unchecked Sendable {
   /// Reference speech tokens (1, T_tok)
   var promptToken: MLXArray

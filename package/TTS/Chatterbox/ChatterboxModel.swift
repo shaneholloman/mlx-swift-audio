@@ -97,7 +97,11 @@ func dropInvalidTokens(_ x: MLXArray) -> MLXArray {
 
 // MARK: - Conditionals
 
-/// Container for T3 and S3Gen conditioning
+/// Container for T3 and S3Gen conditioning.
+///
+/// Marked `@unchecked Sendable` because it contains non-Sendable MLXArray fields
+/// (via `T3Cond` and `S3GenRefDict`), but all access is controlled within the
+/// `ChatterboxTTS` actor's methods.
 struct ChatterboxConditionals: @unchecked Sendable {
   /// T3 conditioning (speaker embedding, prompt tokens, emotion)
   var t3: T3Cond

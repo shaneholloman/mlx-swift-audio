@@ -4,7 +4,10 @@ import MLXNN
 
 // MARK: - T3Cond
 
-/// Container for T3 conditioning information
+/// Container for T3 conditioning information.
+///
+/// Marked `@unchecked Sendable` because it contains non-Sendable MLXArray fields,
+/// but all access is controlled within the `ChatterboxTTS` actor's methods.
 struct T3Cond: @unchecked Sendable {
   /// Speaker embedding from voice encoder (B, speaker_dim)
   var speakerEmb: MLXArray

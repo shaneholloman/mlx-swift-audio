@@ -63,6 +63,7 @@ actor OuteTTS {
   private let config: OuteTTSConfig
   private let model: OuteTTSLMHeadModel
   private let tokenizer: any Tokenizer
+  // nonisolated(unsafe) because it contains non-Sendable types but is immutable after creation
   private nonisolated(unsafe) let audioProcessor: OuteTTSAudioProcessor
   private let promptProcessor: OuteTTSPromptProcessor
   private let defaultSpeaker: OuteTTSSpeakerProfile?
@@ -107,9 +108,11 @@ actor OuteTTS {
     // Get EOS token ID from tokenizer
     let eosTokenId = tokenizer.convertTokenToId("<|im_end|>") ?? 151_645
 
-    // Load audio codec
-    let audioProcessor = OuteTTSAudioProcessor(sampleRate: config.sampleRate)
-    try await audioProcessor.loadCodec(progressHandler: progressHandler)
+    // Load audio processor with codec
+    let audioProcessor = try await OuteTTSAudioProcessor.create(
+      sampleRate: config.sampleRate,
+      progressHandler: progressHandler,
+    )
 
     // buildTokenMaps caches special token IDs for fast prompt building
     let promptProcessor = OuteTTSPromptProcessor()
@@ -414,15 +417,11 @@ actor OuteTTS {
     }
 
     // Decode audio using DAC codec
-    guard let codec = audioProcessor.audioCodec else {
-      throw OuteTTSEngineError.codecNotLoaded
-    }
-
     let c1Array = MLXArray(audioCodes[0].map { Int32($0) })
     let c2Array = MLXArray(audioCodes[1].map { Int32($0) })
     let codesArray = MLX.stacked([c1Array, c2Array], axis: 0).reshaped([1, 2, -1])
 
-    let audio = codec.decodeFromCodes(codesArray)
+    let audio = audioProcessor.audioCodec.decodeFromCodes(codesArray)
     eval(audio)
 
     let audioFlat = audio.reshaped([-1])
@@ -491,7 +490,6 @@ actor OuteTTS {
 
 enum OuteTTSEngineError: Error, LocalizedError {
   case modelNotLoaded
-  case codecNotLoaded
   case invalidInput
   case generationFailed(String)
 
@@ -499,8 +497,6 @@ enum OuteTTSEngineError: Error, LocalizedError {
     switch self {
       case .modelNotLoaded:
         "Model not loaded. Call load() first."
-      case .codecNotLoaded:
-        "Audio codec not loaded."
       case .invalidInput:
         "Invalid input text or parameters."
       case let .generationFailed(reason):

@@ -258,19 +258,26 @@ class OuteTTSFeatures {
 
 // MARK: - Audio Processor
 
-class OuteTTSAudioProcessor {
+/// Audio processor for OuteTTS. Immutable after creation via `create()` factory method.
+final class OuteTTSAudioProcessor {
   let features: OuteTTSFeatures
-  var audioCodec: DACCodec?
+  let audioCodec: DACCodec
   let sampleRate: Int
 
-  init(sampleRate: Int = 24000) {
+  private init(audioCodec: DACCodec, sampleRate: Int) {
     features = OuteTTSFeatures()
+    self.audioCodec = audioCodec
     self.sampleRate = sampleRate
   }
 
-  /// Initialize with DAC codec
-  func loadCodec(repoId: String = DACCodec.defaultRepoId, progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }) async throws {
-    audioCodec = try await DACCodec.fromPretrained(repoId: repoId, progressHandler: progressHandler)
+  /// Create a fully initialized audio processor with the DAC codec loaded.
+  static func create(
+    sampleRate: Int = 24000,
+    repoId: String = DACCodec.defaultRepoId,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
+  ) async throws -> OuteTTSAudioProcessor {
+    let codec = try await DACCodec.fromPretrained(repoId: repoId, progressHandler: progressHandler)
+    return OuteTTSAudioProcessor(audioCodec: codec, sampleRate: sampleRate)
   }
 
   /// Create speaker profile from transcribed audio data
@@ -279,12 +286,8 @@ class OuteTTSAudioProcessor {
     text: String,
     words: [(word: String, start: Double, end: Double)],
   ) async throws -> OuteTTSSpeakerProfile {
-    guard let codec = audioCodec else {
-      throw OuteTTSError.codecNotLoaded
-    }
-
     // Encode audio to get codes
-    let (_, codes) = codec.encode(audio.reshaped([1, 1, -1]))
+    let (_, codes) = audioCodec.encode(audio.reshaped([1, 1, -1]))
     let codesArray = codes.asArray(Int32.self)
 
     // Parse codes into c1 and c2
@@ -377,14 +380,11 @@ class OuteTTSAudioProcessor {
 // MARK: - Errors
 
 enum OuteTTSError: Error, LocalizedError {
-  case codecNotLoaded
   case invalidAudio
   case speakerFileNotFound(String)
 
   var errorDescription: String? {
     switch self {
-      case .codecNotLoaded:
-        "DAC codec not loaded. Call loadCodec() first."
       case .invalidAudio:
         "Invalid or empty audio data"
       case let .speakerFileNotFound(path):
