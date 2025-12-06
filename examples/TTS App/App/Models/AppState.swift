@@ -139,12 +139,12 @@ final class AppState {
       let durationStr = duration.formatted(decimals: 2)
       if let rtf = result.realTimeFactor {
         let rtfStr = rtf.formatted(decimals: 2)
-        return "Generated \(durationStr)s audio in \(timeStr)s (RTF: \(rtfStr)x)"
+        return "Generated \(durationStr) sec. audio in \(timeStr) sec. (RTF: \(rtfStr)x)"
       }
-      return "Generated \(durationStr)s audio in \(timeStr)s"
+      return "Generated \(durationStr) sec. audio in \(timeStr) sec."
     }
 
-    return "Generated in \(timeStr)s"
+    return "Generated in \(timeStr) sec."
   }
 }
 

@@ -223,7 +223,7 @@ public final class ChatterboxEngine: TTSEngine {
     }
 
     let duration = Double(samples.count) / Double(sampleRate)
-    let description = String(format: "Custom audio (%.1fs)", duration)
+    let description = String(format: "Custom audio (%.1f sec.)", duration)
 
     return await prepareReferenceAudioFromSamples(
       samples,

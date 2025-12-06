@@ -41,7 +41,7 @@ public extension BinaryFloatingPoint {
 extension Logger {
   /// Log a timing measurement
   func timing(_ label: String, duration: TimeInterval) {
-    info("\(label): \(duration.formatted(decimals: 3))s")
+    info("\(label): \(duration.formatted(decimals: 3)) sec.")
   }
 
   /// Log a real-time factor

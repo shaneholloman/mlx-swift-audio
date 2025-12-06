@@ -44,13 +44,13 @@ struct ChatterboxTests {
 
     switch result {
       case let .samples(data, sampleRate, processingTime):
-        print("Generated \(data.count) samples at \(sampleRate)Hz in \(String(format: "%.2f", processingTime))s")
+        print("Generated \(data.count) samples at \(sampleRate)Hz in \(String(format: "%.2f", processingTime)) sec.")
         #expect(data.count > 0)
         #expect(sampleRate == ChatterboxS3GenSr)
 
         let audioDuration = Double(data.count) / Double(sampleRate)
         let rtf = processingTime / audioDuration
-        print("Audio duration: \(String(format: "%.2f", audioDuration))s, RTF: \(String(format: "%.2f", rtf))")
+        print("Audio duration: \(String(format: "%.2f", audioDuration)) sec., RTF: \(String(format: "%.2f", rtf))")
 
       case .file:
         Issue.record("Expected samples result, got file")

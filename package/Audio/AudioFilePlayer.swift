@@ -68,7 +68,7 @@ public final class AudioFilePlayer {
           if seconds.isFinite {
             self?.duration = seconds
           }
-          Log.audio.debug("Loaded audio: \(url.lastPathComponent), duration: \(self?.duration ?? 0)s")
+          Log.audio.debug("Loaded audio: \(url.lastPathComponent), duration: \(self?.duration ?? 0) sec.")
         } else if item.status == .failed {
           Log.audio.error("Failed to load audio: \(item.error?.localizedDescription ?? "unknown")")
         }
