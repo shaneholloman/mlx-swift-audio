@@ -23,18 +23,18 @@ enum AudioFileWriterError: LocalizedError {
 }
 
 /// Audio file format options
-enum AudioFileFormat {
+public enum AudioFileFormat {
   case wav
   case caf
 
-  var fileExtension: String {
+  public var fileExtension: String {
     switch self {
       case .wav: "wav"
       case .caf: "caf"
     }
   }
 
-  var commonFormat: AVAudioCommonFormat {
+  public var commonFormat: AVAudioCommonFormat {
     switch self {
       case .wav, .caf: .pcmFormatFloat32
     }
@@ -42,7 +42,7 @@ enum AudioFileFormat {
 }
 
 /// Utility for saving audio samples to files
-enum AudioFileWriter {
+public enum AudioFileWriter {
   /// Save audio samples to a file
   /// - Parameters:
   ///   - samples: Audio samples as Float array
@@ -52,7 +52,7 @@ enum AudioFileWriter {
   ///   - format: Output format (default: .wav for compatibility)
   /// - Returns: URL of the saved file
   /// - Throws: TTSError.fileIOError on failure
-  static func save(
+  public static func save(
     samples: [Float],
     sampleRate: Int,
     to directory: URL? = nil,

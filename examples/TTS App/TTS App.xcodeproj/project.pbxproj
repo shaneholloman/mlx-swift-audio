@@ -10,6 +10,7 @@
 		0A6ECD582E6C2CE300837C54 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 0A6ECD572E6C2CE300837C54 /* MLXLLM */; };
 		0A6ECD5A2E6C2CE300837C54 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 0A6ECD592E6C2CE300837C54 /* MLXLMCommon */; };
 		92D6AB022EE0204C0062E6A9 /* MLXAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 92D6AB032EE0204C0062E6A9 /* MLXAudio */; };
+		92D6AB042EE0204C0062E6AA /* Kokoro in Frameworks */ = {isa = PBXBuildFile; productRef = 92D6AB052EE0204C0062E6AB /* Kokoro */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -43,6 +44,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				92D6AB022EE0204C0062E6A9 /* MLXAudio in Frameworks */,
+				92D6AB042EE0204C0062E6AA /* Kokoro in Frameworks */,
 				0A6ECD582E6C2CE300837C54 /* MLXLLM in Frameworks */,
 				0A6ECD5A2E6C2CE300837C54 /* MLXLMCommon in Frameworks */,
 			);
@@ -89,6 +91,7 @@
 			name = "TTS App";
 			packageProductDependencies = (
 				92D6AB032EE0204C0062E6A9 /* MLXAudio */,
+				92D6AB052EE0204C0062E6AB /* Kokoro */,
 				0A6ECD572E6C2CE300837C54 /* MLXLLM */,
 				0A6ECD592E6C2CE300837C54 /* MLXLMCommon */,
 			);
@@ -434,6 +437,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 92D6AB012EE0204C0062E6A8 /* XCLocalSwiftPackageReference "../../../mlx-swift-audio" */;
 			productName = MLXAudio;
+		};
+		92D6AB052EE0204C0062E6AB /* Kokoro */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 92D6AB012EE0204C0062E6A8 /* XCLocalSwiftPackageReference "../../../mlx-swift-audio" */;
+			productName = Kokoro;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

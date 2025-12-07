@@ -38,7 +38,7 @@ public extension BinaryFloatingPoint {
 
 // MARK: - Logger Extensions
 
-extension Logger {
+public extension Logger {
   /// Log a timing measurement
   func timing(_ label: String, duration: TimeInterval) {
     info("\(label): \(duration.formatted(decimals: 3)) sec.")

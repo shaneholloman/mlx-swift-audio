@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import MLXAudio
 
 /// Kokoro TTS engine - fast, lightweight TTS with many voice options
 @Observable
@@ -405,5 +406,14 @@ public final class KokoroEngine: TTSEngine {
       isPlaying = false
       throw error
     }
+  }
+}
+
+// MARK: - TTS Factory Extension
+
+public extension TTS {
+  /// Kokoro: 50+ voices with speed control
+  static func kokoro() -> KokoroEngine {
+    KokoroEngine()
   }
 }

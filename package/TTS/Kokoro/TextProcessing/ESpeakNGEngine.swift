@@ -1,5 +1,6 @@
 import Foundation
 import libespeak_ng
+import MLXAudio
 
 final class ESpeakNGEngine {
   private var language: LanguageDialect = .none

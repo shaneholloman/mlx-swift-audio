@@ -1,5 +1,6 @@
 import Foundation
 import MLX
+import MLXAudio
 import MLXNN
 import Synchronization
 

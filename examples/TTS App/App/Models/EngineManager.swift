@@ -1,4 +1,5 @@
 import Foundation
+import Kokoro
 import MLX
 import MLXAudio
 

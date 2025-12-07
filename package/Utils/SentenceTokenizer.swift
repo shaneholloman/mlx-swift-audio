@@ -1,12 +1,12 @@
 import Foundation
 @preconcurrency import NaturalLanguage
 
-final class SentenceTokenizer {
+public final class SentenceTokenizer {
   private init() {}
 
   // MARK: - Initial Split
 
-  static func splitIntoSentences(text: String) -> [String] {
+  public static func splitIntoSentences(text: String) -> [String] {
     guard !text.isEmpty else { return [] }
 
     let detectedLanguage = detectLanguage(text: text)

@@ -4,14 +4,14 @@ import Foundation
 /// Plays raw audio samples for TTS engines
 @Observable
 @MainActor
-final class AudioSamplePlayer {
+public final class AudioSamplePlayer {
   // MARK: - Public State
 
   /// Whether audio is currently playing
-  private(set) var isPlaying: Bool = false
+  public private(set) var isPlaying: Bool = false
 
   /// Number of samples currently queued for playback
-  private(set) var queuedSampleCount: Int = 0
+  public private(set) var queuedSampleCount: Int = 0
 
   // MARK: - Private Properties
 
@@ -27,7 +27,7 @@ final class AudioSamplePlayer {
 
   /// Create an audio engine with the specified sample rate
   /// - Parameter sampleRate: Sample rate in Hz (default: 24000)
-  init(sampleRate: Int = 24000) {
+  public init(sampleRate: Int = 24000) {
     self.sampleRate = sampleRate
     setup()
   }
@@ -68,7 +68,7 @@ final class AudioSamplePlayer {
   /// - Parameters:
   ///   - samples: Float audio samples
   ///   - volumeBoost: Optional volume multiplier (default: 1.25)
-  func play(samples: [Float], volumeBoost: Float = TTSConstants.Audio.volumeBoostFactor) async {
+  public func play(samples: [Float], volumeBoost: Float = TTSConstants.Audio.volumeBoostFactor) async {
     guard !samples.isEmpty else { return }
 
     // Stop any current playback (but don't restart engine)
@@ -96,7 +96,7 @@ final class AudioSamplePlayer {
   /// - Parameters:
   ///   - samples: Float audio samples to enqueue
   ///   - prebufferSeconds: Seconds to buffer before starting playback (0 for immediate)
-  func enqueue(samples: [Float], prebufferSeconds: Double = 0) {
+  public func enqueue(samples: [Float], prebufferSeconds: Double = 0) {
     guard !samples.isEmpty else { return }
 
     resetEngineIfNeeded()
@@ -150,7 +150,7 @@ final class AudioSamplePlayer {
   }
 
   /// Stop playback and reset state
-  func stop() async {
+  public func stop() async {
     // Resume any waiting continuation before stopping
     playbackCompletionContinuation?.resume()
     playbackCompletionContinuation = nil

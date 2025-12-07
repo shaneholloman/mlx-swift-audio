@@ -1,3 +1,4 @@
+import Kokoro
 import MLXAudio
 import SwiftUI
 

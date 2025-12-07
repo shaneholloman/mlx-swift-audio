@@ -80,15 +80,14 @@ public extension TTSEngine {
 /// engine-specific features like typed voices.
 ///
 /// ```swift
-/// let engine = TTS.kokoro()
+/// let engine = TTS.orpheus()
 /// try await engine.load()
-/// try await engine.say("Hello", voice: .afHeart)  // typed voice enum
+/// try await engine.say("Hello", voice: .dan)  // typed voice enum
 /// ```
+///
+/// For Kokoro, import MLXAudioKokoro and use `KokoroEngine()` directly.
 @MainActor
 public enum TTS {
-  /// Kokoro: 50+ voices, speed control, streaming
-  public static func kokoro() -> KokoroEngine { KokoroEngine() }
-
   /// Orpheus: 8 voices, emotional expressions
   public static func orpheus() -> OrpheusEngine { OrpheusEngine() }
 

@@ -11,20 +11,24 @@
 
 ### Installation
 
-```swift
-.package(url: "https://github.com/DePasqualeOrg/mlx-swift-audio.git", branch: "main")
-```
+In Xcode, go to File > Add Package Dependencies and enter `https://github.com/DePasqualeOrg/mlx-swift-audio`. Select the `main` branch, then add `MLXAudio` to your target. If you want to use Kokoro (which has GPLv3 dependencies), also add the `Kokoro` library.
 
 ### Usage
 
 ```swift
 import MLXAudio
 
-// Kokoro - 50+ voices, speed control
-let kokoro = TTS.kokoro()
-try await kokoro.load()
-try await kokoro.say("Hello, world!", voice: .afHeart)
-try await kokoro.say("Speaking faster", voice: .afNova, speed: 1.5)
+// Chatterbox - custom voices from reference audio and emotion control
+let chatterbox = TTS.chatterbox()
+try await chatterbox.load()
+let referenceAudio = try await chatterbox.prepareReferenceAudio(from: audioFileURL)
+try await chatterbox.say("Speaking with your reference audio.", referenceAudio: referenceAudio)
+
+// OuteTTS - custom voices from reference audio
+let outetts = TTS.outetts()
+try await outetts.load()
+let speaker = try await OuteTTSSpeakerProfile.load(from: "speaker.json")
+try await outetts.say("Using reference audio.", speaker: speaker)
 
 // Orpheus - emotional expressions
 let orpheus = TTS.orpheus()
@@ -36,25 +40,14 @@ let marvis = TTS.marvis()
 try await marvis.load()
 try await marvis.sayStreaming("This plays as it generates.", voice: .conversationalA)
 
-// OuteTTS - custom voices with reference audio
-let outetts = TTS.outetts()
-try await outetts.load()
-let speaker = try await OuteTTSSpeakerProfile.load(from: "speaker.json")
-try await outetts.say("Using reference audio.", speaker: speaker)
-
-// Chatterbox - custom reference audio with emotion control
-let chatterbox = TTS.chatterbox()
-try await chatterbox.load()
-let referenceAudio = try await chatterbox.prepareReferenceAudio(from: audioFileURL)
-try await chatterbox.say("Speaking with your reference audio.", referenceAudio: referenceAudio)
 ```
 
 For more control over playback:
 
 ```swift
-let kokoro = TTS.kokoro()
-try await kokoro.load()
-let audio = try await kokoro.generate("Hello!", voice: .afHeart)
+let orpheus = TTS.orpheus()
+try await orpheus.load()
+let audio = try await orpheus.generate("Hello!", voice: .tara)
 await audio.play()
 ```
 
@@ -80,7 +73,7 @@ Voice synthesis technology should be used responsibly. Obtain consent before usi
 
 This project is licensed under the MIT License.
 
-The Kokoro TTS engine imports [espeak-ng-spm](https://github.com/espeak-ng/espeak-ng-spm) as a Swift package, which is licensed under GPLv3. This may have implications for binaries built with this library.
+The main MLXAudio library includes all TTS engines except Kokoro. The separate Kokoro library imports [espeak-ng-spm](https://github.com/espeak-ng/espeak-ng-spm) as a Swift package, which is licensed under GPLv3. To use Kokoro, explicitly import the separate Kokoro library.
 
 ### History
 

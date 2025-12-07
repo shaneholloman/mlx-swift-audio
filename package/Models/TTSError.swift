@@ -100,7 +100,7 @@ public enum TTSError: LocalizedError {
       case .audioPlaybackFailed:
         "Check that the audio session is configured correctly."
       case .invalidVoice:
-        "Use availableVoices to see the list of valid voices."
+        "Check the engine's Voice enum for valid options."
       case .insufficientMemory:
         "Close other applications to free up memory, or use a smaller model."
       case .cancelled:
