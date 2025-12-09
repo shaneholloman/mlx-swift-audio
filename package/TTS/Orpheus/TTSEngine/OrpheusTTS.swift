@@ -4,6 +4,7 @@ import Foundation
 @preconcurrency import MLXLMCommon
 @preconcurrency import MLXNN
 import MLXRandom
+import Synchronization
 
 // Orpheus TTS - Swift implementation of the Orpheus 3B model
 
@@ -207,15 +208,15 @@ actor OrpheusTTS {
     topP: Float = 0.8,
   ) -> AsyncThrowingStream<[Float], Error> {
     let sentences = SentenceTokenizer.splitIntoSentences(text: text)
+    let sentenceIndex = Atomic<Int>(0)
 
-    var sentenceIndex = 0
     return AsyncThrowingStream {
-      guard sentenceIndex < sentences.count else { return nil }
+      let i = sentenceIndex.wrappingAdd(1, ordering: .relaxed).oldValue
+      guard i < sentences.count else { return nil }
 
-      let sentence = sentences[sentenceIndex]
-      sentenceIndex += 1
+      try Task.checkCancellation()
 
-      let result = try await self.generateChunk(text: sentence, voice: voice, temperature: temperature, topP: topP)
+      let result = try await self.generateChunk(text: sentences[i], voice: voice, temperature: temperature, topP: topP)
       MLXMemory.clearCache()
       return result.audio
     }

@@ -1,5 +1,6 @@
 import Foundation
 import MLX
+import Synchronization
 
 /// Actor wrapper for ChatterboxModel that provides thread-safe generation
 actor ChatterboxTTS {
@@ -167,19 +168,16 @@ actor ChatterboxTTS {
     maxNewTokens: Int = 1000,
   ) -> AsyncThrowingStream<[Float], Error> {
     let chunks = splitTextForGeneration(text)
+    let chunkIndex = Atomic<Int>(0)
 
-    var chunkIndex = 0
     return AsyncThrowingStream {
-      guard chunkIndex < chunks.count else { return nil }
+      let i = chunkIndex.wrappingAdd(1, ordering: .relaxed).oldValue
+      guard i < chunks.count else { return nil }
 
-      // Check for cancellation before generating each chunk
       try Task.checkCancellation()
 
-      let chunk = chunks[chunkIndex]
-      chunkIndex += 1
-
       let audioArray = self.model.generate(
-        text: chunk,
+        text: chunks[i],
         conds: conditionals,
         exaggeration: exaggeration,
         cfgWeight: cfgWeight,

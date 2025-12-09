@@ -136,7 +136,9 @@ actor MarvisTTS {
     quality: MarvisEngine.QualityLevel,
     interval: Double,
   ) -> AsyncThrowingStream<TTSGenerationResult, Error> {
-    AsyncThrowingStream { continuation in
+    let (stream, continuation) = AsyncThrowingStream<TTSGenerationResult, Error>.makeStream()
+
+    let task = Task {
       do {
         let sentences = SentenceTokenizer.splitIntoSentences(text: text)
         _ = try self.generateCore(
@@ -147,15 +149,19 @@ actor MarvisTTS {
           qualityLevel: quality,
           stream: true,
           streamingInterval: interval,
-          onStreamingResult: { result in
-            continuation.yield(result)
-          },
+          onStreamingResult: { continuation.yield($0) },
         )
         continuation.finish()
       } catch {
         continuation.finish(throwing: error)
       }
     }
+
+    continuation.onTermination = { _ in
+      task.cancel()
+    }
+
+    return stream
   }
 
   // MARK: - Model Loading

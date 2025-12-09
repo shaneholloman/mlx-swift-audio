@@ -4,6 +4,7 @@ import Hub
 @preconcurrency import MLXLMCommon
 @preconcurrency import MLXNN
 import MLXRandom
+import Synchronization
 import Tokenizers
 
 // MARK: - OuteTTS Configuration
@@ -355,24 +356,20 @@ actor OuteTTS {
     maxTokens: Int? = nil,
   ) -> AsyncThrowingStream<[Float], Error> {
     let sentences = SentenceTokenizer.splitIntoSentences(text: text)
-    let speakerProfile = speaker
-    let temp = temperature
-    let top = topP
-    let maxToks = maxTokens
+    let sentenceIndex = Atomic<Int>(0)
 
-    var sentenceIndex = 0
     return AsyncThrowingStream {
-      guard sentenceIndex < sentences.count else { return nil }
+      let i = sentenceIndex.wrappingAdd(1, ordering: .relaxed).oldValue
+      guard i < sentences.count else { return nil }
 
-      let sentence = sentences[sentenceIndex]
-      sentenceIndex += 1
+      try Task.checkCancellation()
 
       let result = try await self.generateChunk(
-        text: sentence,
-        speaker: speakerProfile,
-        temperature: temp,
-        topP: top,
-        maxTokens: maxToks,
+        text: sentences[i],
+        speaker: speaker,
+        temperature: temperature,
+        topP: topP,
+        maxTokens: maxTokens,
       )
       MLXMemory.clearCache()
       return result.audio
