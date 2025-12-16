@@ -2,7 +2,8 @@ import Foundation
 
 /// Supported languages for Whisper speech recognition
 ///
-/// Whisper supports 99 languages for transcription and can translate any of them to English.
+/// Whisper supports 100 languages for transcription and can translate any of them to English.
+/// Order matches the official Whisper language token order for consistency.
 public enum Language: String, CaseIterable, Sendable {
   case english = "en"
   case chinese = "zh"
@@ -103,6 +104,7 @@ public enum Language: String, CaseIterable, Sendable {
   case bashkir = "ba"
   case javanese = "jw"
   case sundanese = "su"
+  case cantonese = "yue"
 
   /// Human-readable language name in English
   public var displayName: String {
@@ -206,6 +208,7 @@ public enum Language: String, CaseIterable, Sendable {
       case .bashkir: "Bashkir"
       case .javanese: "Javanese"
       case .sundanese: "Sundanese"
+      case .cantonese: "Cantonese"
     }
   }
 

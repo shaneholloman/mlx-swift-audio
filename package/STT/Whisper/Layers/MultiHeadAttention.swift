@@ -51,15 +51,6 @@ class WhisperMultiHeadAttention: Module {
         // Compute cross-attention K,V from audio features
         k = key(xa)
         v = value(xa)
-
-        // Debug: verify audio features are being used
-        #if DEBUG
-        let xaMean = xa.mean().item(Float.self)
-        let xaStd = xa.variance().sqrt().item(Float.self)
-        if abs(xaMean) > 1.0 || xaStd < 0.01 {
-          print("[CrossAttn] WARNING: xa stats unusual - mean=\(xaMean), std=\(xaStd)")
-        }
-        #endif
       }
     } else {
       // Self-attention: use x for key/value

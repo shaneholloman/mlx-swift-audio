@@ -68,16 +68,18 @@ actor WhisperSTT {
     }
 
     // Verify critical token IDs match expected values based on model type
-    // Multilingual: eot=50257, sot=50258, transcribe=50359
-    // English-only: eot=50256, sot=50257, transcribe=50358
+    // Multilingual: eot=50257, sot=50258, transcribe=50360, timestamp_begin=50365
+    // English-only: eot=50256, sot=50257, transcribe=50359, timestamp_begin=50364
     if model.isMultilingual {
       assert(tokenizer.eot == 50257, "Multilingual EOT token must be 50257")
       assert(tokenizer.sot == 50258, "Multilingual SOT token must be 50258")
-      assert(tokenizer.transcribe == 50359, "Multilingual transcribe token must be 50359")
+      assert(tokenizer.transcribe == 50360, "Multilingual transcribe token must be 50360")
+      assert(tokenizer.timestampBegin == 50365, "Multilingual timestamp_begin must be 50365")
     } else {
       assert(tokenizer.eot == 50256, "English-only EOT token must be 50256")
       assert(tokenizer.sot == 50257, "English-only SOT token must be 50257")
-      assert(tokenizer.transcribe == 50358, "English-only transcribe token must be 50358")
+      assert(tokenizer.transcribe == 50359, "English-only transcribe token must be 50359")
+      assert(tokenizer.timestampBegin == 50364, "English-only timestamp_begin must be 50364")
     }
 
     return WhisperSTT(model: model, tokenizer: tokenizer)
@@ -132,10 +134,9 @@ actor WhisperSTT {
     let paddedAudio = MLX.concatenated([audio, MLXArray.zeros([WhisperAudio.nSamples])], axis: 0)
 
     // Compute mel spectrogram for entire audio (with padding)
+    // Returns (n_frames, n_mels) - already in the right shape for Conv1d
     let fullMel = whisperLogMelSpectrogram(audio: paddedAudio, nMels: model.dims.n_mels)
-    // Transpose from (n_mels, n_frames) to (n_frames, n_mels) for MLX Conv1d
-    let fullMelTransposed = fullMel.transposed()
-    eval(fullMelTransposed)
+    eval(fullMel)
 
     // Content frames (excluding padding)
     let contentFrames = audio.shape[0] / hopLength
@@ -146,8 +147,8 @@ actor WhisperSTT {
     // Detect language if not specified
     var detectedLanguage: String? = nil
     if language == nil {
-      let melSegment = padOrTrimMel(fullMelTransposed[0 ..< nFrames], length: nFrames)
-      let batchedMel = melSegment.expandedDimensions(axis: 0)
+      let melSegment = padOrTrimMel(fullMel[0 ..< nFrames], length: nFrames)
+      let batchedMel = melSegment.expandedDimensions(axis: 0).asType(.float16)
       let (lang, prob) = detectLanguageFromMel(batchedMel)
       detectedLanguage = lang
       Log.model.info("Detected language: \(lang) (probability: \(String(format: "%.2f", prob)))")
@@ -167,9 +168,12 @@ actor WhisperSTT {
       let segmentSize = min(nFrames, contentFrames - seek)
       let segmentDuration = Float(segmentSize * hopLength) / Float(sampleRate)
 
+      Log.model.debug("Processing segment: seek=\(seek) (\(String(format: "%.2f", timeOffset))s), size=\(segmentSize) frames (\(String(format: "%.2f", segmentDuration))s)")
+
       // Extract mel segment and pad to nFrames
-      let melSegment = padOrTrimMel(fullMelTransposed[seek ..< (seek + segmentSize)], length: nFrames)
-      let batchedMel = melSegment.expandedDimensions(axis: 0)
+      // Cast to float16 to match Python's behavior (line 612-614 in whisper.py)
+      let melSegment = padOrTrimMel(fullMel[seek ..< (seek + segmentSize)], length: nFrames)
+      let batchedMel = melSegment.expandedDimensions(axis: 0).asType(.float16)
 
       // Build prompt from previous tokens (if conditioning enabled)
       // Use tokens since last prompt reset (matches Python: all_tokens[prompt_reset_since:])
@@ -234,6 +238,12 @@ actor WhisperSTT {
         }
       }
 
+      let decodedText = tokenizer.decode(result.tokens.filter { $0 < tokenizer.eot })
+      // Log timestamp tokens for debugging
+      let tsTokens = result.tokens.filter { $0 >= tokenizer.timestampBegin }
+      let tsPositions = tsTokens.map { Float($0 - tokenizer.timestampBegin) * 0.02 }
+      Log.model.debug("Decoded: noSpeechProb=\(String(format: "%.3f", result.noSpeechProb)), avgLogProb=\(String(format: "%.3f", result.avgLogProb)), tokens=\(result.tokens.count), timestamps=\(tsPositions), text='\(decodedText.prefix(100))'")
+
       // No-speech detection: skip if no_speech_prob > threshold
       if let nsThreshold = noSpeechThreshold {
         var shouldSkip = result.noSpeechProb > nsThreshold
@@ -244,6 +254,7 @@ actor WhisperSTT {
         }
 
         if shouldSkip {
+          Log.model.debug("Skipping segment due to no-speech detection (prob=\(String(format: "%.3f", result.noSpeechProb)) > \(nsThreshold))")
           seek += segmentSize
           continue
         }
@@ -378,6 +389,14 @@ actor WhisperSTT {
         }
       }
 
+      // Ensure seek never moves backward (WhisperKit safety mechanism)
+      seek = max(previousSeek, seek)
+
+      Log.model.debug("Seek advanced: \(previousSeek) -> \(seek) (\(String(format: "%.2f", Float(seek * hopLength) / Float(sampleRate)))s), segments=\(currentSegments.count)")
+
+      // Filter out zero-length segments (WhisperKit approach)
+      currentSegments = currentSegments.filter { $0.end > $0.start }
+
       // Add word timestamps if requested (batched for efficiency)
       if timestamps == .word {
         // Use batched word timestamp extraction (single forward pass for all segments)
@@ -399,7 +418,6 @@ actor WhisperSTT {
             seek = Int(lastWordEnd * Float(framesPerSecond))
           }
         }
-
         // Hallucination detection (inline, matching Python)
         if let threshold = hallucinationSilenceThreshold {
           // Python lines 756-767: Check remaining duration after last word
@@ -484,21 +502,49 @@ actor WhisperSTT {
         }
       }
 
-      // Clear empty segments (matches Python: keep segment but clear text/tokens/words)
-      // Python lines 836-844: if start == end or text.strip() == "", clear fields but keep segment
-      currentSegments = currentSegments.map { segment in
-        if segment.start == segment.end || segment.text.trimmingCharacters(in: .whitespaces).isEmpty {
-          return TranscriptionSegment(
-            text: "",
-            start: segment.start,
-            end: segment.end,
-            tokens: [],
-            avgLogProb: segment.avgLogProb,
-            noSpeechProb: segment.noSpeechProb,
-            words: []
-          )
+      // Filter out problematic segments (inspired by WhisperKit's threshold-based approach):
+      // 1. Zero-duration segments (start == end)
+      // 2. Empty text after trimming whitespace
+      // 3. Punctuation-only segments (likely artifacts)
+      // 4. High no-speech probability segments (likely silence/hallucination)
+      // 5. For word timestamps: segments where word alignment failed but text exists
+      let punctuationOnly = CharacterSet.punctuationCharacters.union(.whitespaces)
+      currentSegments = currentSegments.filter { segment in
+        // Keep segments with valid duration and non-empty meaningful text
+        let trimmedText = segment.text.trimmingCharacters(in: .whitespaces)
+        let hasMeaningfulText = !trimmedText.isEmpty &&
+          !trimmedText.unicodeScalars.allSatisfy { punctuationOnly.contains($0) }
+
+        // Filter high no-speech probability segments (WhisperKit uses 0.6 default threshold)
+        // These are likely hallucinations from silence/padding
+        if segment.noSpeechProb > 0.9 {
+          Log.model.warning("Filtering high no-speech segment (\(segment.noSpeechProb)): '\(trimmedText.prefix(50))'")
+          return false
         }
-        return segment
+
+        // For word timestamps: apply multiple hallucination checks
+        if timestamps == .word {
+          let hasWords = segment.words != nil && !segment.words!.isEmpty
+          // If we have text but no words, be suspicious - only keep if it's very short text
+          if hasMeaningfulText, !hasWords, trimmedText.count > 10 {
+            Log.model.warning("Filtering potential hallucination (no word alignment): '\(trimmedText.prefix(50))'")
+            return false
+          }
+
+          // Check for anomalous word patterns (very short, very long, or low probability)
+          // This catches hallucinations like "iğ", "B gensham", etc.
+          if hasWords {
+            let wordTimings = segment.words!.map {
+              WordTiming(word: $0.word, tokens: [], start: Float($0.start), end: Float($0.end), probability: $0.probability)
+            }
+            if isSegmentAnomaly(wordTimings) {
+              Log.model.warning("Filtering anomalous segment (suspicious word patterns): '\(trimmedText.prefix(50))'")
+              return false
+            }
+          }
+        }
+
+        return segment.start != segment.end && hasMeaningfulText
       }
 
       // Add segments and tokens
@@ -515,7 +561,11 @@ actor WhisperSTT {
     }
 
     let audioDuration = Double(audio.shape[0]) / Double(sampleRate)
-    let fullText = allSegments.map { $0.text }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+    // Decode all tokens together to preserve natural spacing (matching WhisperKit/Python behavior)
+    // Filter out special tokens (timestamps, etc.) before decoding
+    // This avoids double spaces that occur when joining segment texts with a separator
+    let textTokens = allTokens.filter { $0 < tokenizer.eot }
+    let fullText = tokenizer.decode(textTokens).trimmingCharacters(in: .whitespaces)
 
     let transcribeEndTime = CFAbsoluteTimeGetCurrent()
     let totalTime = transcribeEndTime - transcribeStartTime
@@ -556,12 +606,12 @@ actor WhisperSTT {
     let paddedAudio = padOrTrim(audio)
     eval(paddedAudio)
 
-    // Compute mel spectrogram
+    // Compute mel spectrogram - returns (n_frames, n_mels)
     let mel = whisperLogMelSpectrogram(audio: paddedAudio, nMels: model.dims.n_mels)
-    let melTransposed = mel.transposed()
     // Ensure exactly 3000 frames to match encoder expectations
-    let melTrimmed = padOrTrimMel(melTransposed, length: WhisperAudio.nFrames)
-    let batchedMel = melTrimmed.expandedDimensions(axis: 0)
+    let melTrimmed = padOrTrimMel(mel, length: WhisperAudio.nFrames)
+    // Cast to float16 to match Python's behavior
+    let batchedMel = melTrimmed.expandedDimensions(axis: 0).asType(.float16)
 
     return detectLanguageFromMel(batchedMel)
   }
@@ -587,10 +637,10 @@ actor WhisperSTT {
     let (logits, _, _) = model.decode(sotToken, audioFeatures: audioFeatures)
 
     // Extract language token logits
-    // Language tokens start at sot + 1 and span 99 tokens
-    // Multilingual: 50259-50357, English-only: 50258-50356
+    // Language tokens start at sot + 1 and span WHISPER_NUM_LANGUAGES (100) tokens
+    // Multilingual: 50259-50358, English-only: 50258-50357
     let languageTokenStart = tokenizer.sot + 1
-    let languageTokenEnd = tokenizer.sot + 100 // Exclusive (99 language tokens)
+    let languageTokenEnd = tokenizer.sot + 1 + WHISPER_NUM_LANGUAGES // Exclusive
     let languageLogits = logits[0, 0, languageTokenStart ..< languageTokenEnd]
 
     // Find language with highest probability
@@ -598,33 +648,12 @@ actor WhisperSTT {
     let maxIdx = MLX.argMax(probs).item(Int32.self)
     let maxProb = probs[Int(maxIdx)].item(Float.self)
 
-    // Map index to language code
+    // Map index to language code using tokenizer's single source of truth
     let languageIdx = Int(maxIdx)
-    let languageCode = Self.languageCodes[languageIdx] ?? "en"
+    let languageCode = tokenizer.languageCode(forIndex: languageIdx) ?? "en"
 
     return (languageCode, maxProb)
   }
-
-  /// Language codes indexed by position (token offset from 50259)
-  private static let languageCodes: [Int: String] = [
-    0: "en", 1: "zh", 2: "de", 3: "es", 4: "ru", 5: "ko",
-    6: "fr", 7: "ja", 8: "pt", 9: "tr", 10: "pl", 11: "ca",
-    12: "nl", 13: "ar", 14: "sv", 15: "it", 16: "id", 17: "hi",
-    18: "fi", 19: "vi", 20: "he", 21: "uk", 22: "el", 23: "ms",
-    24: "cs", 25: "ro", 26: "da", 27: "hu", 28: "ta", 29: "no",
-    30: "th", 31: "ur", 32: "hr", 33: "bg", 34: "lt", 35: "la",
-    36: "mi", 37: "ml", 38: "cy", 39: "sk", 40: "te", 41: "fa",
-    42: "lv", 43: "bn", 44: "sr", 45: "az", 46: "sl", 47: "kn",
-    48: "et", 49: "mk", 50: "br", 51: "eu", 52: "is", 53: "hy",
-    54: "ne", 55: "mn", 56: "bs", 57: "kk", 58: "sq", 59: "sw",
-    60: "gl", 61: "mr", 62: "pa", 63: "si", 64: "km", 65: "sn",
-    66: "yo", 67: "so", 68: "af", 69: "oc", 70: "ka", 71: "be",
-    72: "tg", 73: "sd", 74: "gu", 75: "am", 76: "yi", 77: "lo",
-    78: "uz", 79: "fo", 80: "ht", 81: "ps", 82: "tk", 83: "nn",
-    84: "mt", 85: "sa", 86: "lb", 87: "my", 88: "bo", 89: "tl",
-    90: "mg", 91: "as", 92: "tt", 93: "haw", 94: "ln", 95: "ha",
-    96: "ba", 97: "jw", 98: "su",
-  ]
 
   // MARK: - Audio Segmentation
 

@@ -213,22 +213,35 @@ class WhisperModel: Module {
 
   /// Detect the spoken language in the audio
   ///
+  /// Note: Language detection is only meaningful for multilingual models.
+  /// For English-only models, this always returns ("en", 1.0).
+  ///
   /// - Parameter mel: Mel spectrogram (batch, n_mels, n_frames)
   /// - Returns: Tuple of (language_code, probability)
   func detectLanguage(_ mel: MLXArray) -> (String, Float) {
+    // English-only models don't have language tokens
+    guard isMultilingual else {
+      return ("en", 1.0)
+    }
+
+    // Compute token IDs dynamically (matching tokenizer logic)
+    // Multilingual: base=50257, eot=50257, sot=50258
+    // Language tokens start at sot+1 = 50259
+    let baseVocabSize = 50257
+    let sot = baseVocabSize + 1 // 50258
+    let languageTokenStart = sot + 1 // 50259
+
     // Encode audio
     let audioFeatures = encode(mel)
 
-    // Create SOT sequence for language detection
-    // [SOT] token ID is 50258
-    let sotToken = MLXArray([Int32(50258)]).expandedDimensions(axis: 0)
+    // Create SOT token for language detection
+    let sotToken = MLXArray([Int32(sot)]).expandedDimensions(axis: 0)
 
     // Get logits for the first token after SOT
     let (logits, _, _) = decode(sotToken, audioFeatures: audioFeatures)
 
-    // Get language token logits (tokens 50259-50357 are language tokens)
-    let languageTokenStart = 50259
-    let languageTokenEnd = 50358 // Exclusive
+    // Get language token logits (100 language tokens)
+    let languageTokenEnd = languageTokenStart + WHISPER_NUM_LANGUAGES
     let languageLogits = logits[0, 0, languageTokenStart ..< languageTokenEnd]
 
     // Find the language with highest probability
@@ -236,33 +249,10 @@ class WhisperModel: Module {
     let maxIdx = MLX.argMax(probs).item(Int32.self)
     let maxProb = probs[Int(maxIdx)].item(Float.self)
 
-    // Map index to language code
+    // Map index to language code using WHISPER_LANGUAGES (single source of truth)
     let languageIdx = Int(maxIdx)
-    let languageCode = LANGUAGES[languageIdx] ?? "en"
+    let languageCode = languageIdx < WHISPER_NUM_LANGUAGES ? WHISPER_LANGUAGES[languageIdx].code : "en"
 
     return (languageCode, maxProb)
   }
 }
-
-/// Whisper language codes (ISO 639-1)
-///
-/// Index corresponds to language token offset from 50259
-private let LANGUAGES: [Int: String] = [
-  0: "en", 1: "zh", 2: "de", 3: "es", 4: "ru", 5: "ko",
-  6: "fr", 7: "ja", 8: "pt", 9: "tr", 10: "pl", 11: "ca",
-  12: "nl", 13: "ar", 14: "sv", 15: "it", 16: "id", 17: "hi",
-  18: "fi", 19: "vi", 20: "he", 21: "uk", 22: "el", 23: "ms",
-  24: "cs", 25: "ro", 26: "da", 27: "hu", 28: "ta", 29: "no",
-  30: "th", 31: "ur", 32: "hr", 33: "bg", 34: "lt", 35: "la",
-  36: "mi", 37: "ml", 38: "cy", 39: "sk", 40: "te", 41: "fa",
-  42: "lv", 43: "bn", 44: "sr", 45: "az", 46: "sl", 47: "kn",
-  48: "et", 49: "mk", 50: "br", 51: "eu", 52: "is", 53: "hy",
-  54: "ne", 55: "mn", 56: "bs", 57: "kk", 58: "sq", 59: "sw",
-  60: "gl", 61: "mr", 62: "pa", 63: "si", 64: "km", 65: "sn",
-  66: "yo", 67: "so", 68: "af", 69: "oc", 70: "ka", 71: "be",
-  72: "tg", 73: "sd", 74: "gu", 75: "am", 76: "yi", 77: "lo",
-  78: "uz", 79: "fo", 80: "ht", 81: "ps", 82: "tk", 83: "nn",
-  84: "mt", 85: "sa", 86: "lb", 87: "my", 88: "bo", 89: "tl",
-  90: "mg", 91: "as", 92: "tt", 93: "haw", 94: "ln", 95: "ha",
-  96: "ba", 97: "jw", 98: "su",
-]

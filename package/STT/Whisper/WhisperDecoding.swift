@@ -294,27 +294,21 @@ class GreedyDecoder {
 
       // =============================================================================
       // STEP 3: Apply timestamp probability heuristic (Python lines 381-394)
-      // Python's ApplyTimestampRules.apply() receives logits already filtered by
-      // SuppressBlank and SuppressTokens, so we use logits + baseMask here
+      // IMPORTANT: Python uses RAW logits (not filtered) for probability computation
+      // The mask is built separately and applied at the end
       // =============================================================================
       var forceTimestamp = false
-      var timestampLogProbSumValue: Float = 0
-      var maxTextLogProbValue: Float = 0
       if options.timestamps != .none, numGenerated > 0 {
-        // Python: logits passed to ApplyTimestampRules have SuppressBlank + SuppressTokens applied
-        // Swift equivalent: lastLogits + baseMask (baseMask contains those suppressions)
-        let filteredLogits = lastLogits + baseMask
-        let logProbs = filteredLogits - MLX.logSumExp(filteredLogits, axes: [-1], keepDims: true)
+        // Python: uses RAW logits for probability computation, not filtered
+        // logprobs = logits - mx.logsumexp(logits, axis=-1, keepdims=True)
+        let logProbs = lastLogits - MLX.logSumExp(lastLogits, axes: [-1], keepDims: true)
 
         // Compare timestamp vs text token probabilities
         // Python uses logsumexp (combined probability of all timestamps) vs max text token
         let timestampLogProbSum = MLX.logSumExp(logProbs[tokenizer.timestampBegin...], axes: [-1], keepDims: true)
         let maxTextLogProb = logProbs[0 ..< tokenizer.timestampBegin].max(axes: [-1], keepDims: true)
 
-        timestampLogProbSumValue = timestampLogProbSum.item(Float.self)
-        maxTextLogProbValue = maxTextLogProb.item(Float.self)
-
-        if timestampLogProbSumValue > maxTextLogProbValue {
+        if timestampLogProbSum.item(Float.self) > maxTextLogProb.item(Float.self) {
           forceTimestamp = true
         }
       }

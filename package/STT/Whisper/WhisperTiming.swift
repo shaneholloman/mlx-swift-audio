@@ -637,9 +637,22 @@ func findAlignment(
     return []
   }
 
+  // Ensure we have enough frames to process
+  // This can happen with very short final segments where numFrames/2 is too small
+  guard framesLen >= 2 else {
+    Log.model.warning("Frame count too small for alignment: \(framesLen) frames (need at least 2)")
+    return []
+  }
+
   // Stack heads and slice to frame count: (heads, tokens, frames)
   var weights = MLX.stacked(headWeightsArrays, axis: 0)
   weights = weights[0..., 0..., 0 ..< framesLen]
+
+  // Ensure we have enough tokens for reduce operations (need > 1 for mean/variance along tokens axis)
+  guard weights.shape[1] >= 2 else {
+    Log.model.warning("Token count too small for alignment: \(weights.shape[1]) tokens (need at least 2)")
+    return []
+  }
 
   // GPU preprocessing (matching Python exactly):
   // weights = mx.softmax(weights * qk_scale, axis=-1, precise=True)

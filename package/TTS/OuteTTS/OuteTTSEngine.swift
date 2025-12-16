@@ -416,14 +416,6 @@ public final class OuteTTSEngine: TTSEngine {
       }
     }
 
-    // Debug: Print word timestamps for verification
-    print("[OuteTTS] Transcription: \"\(result.text)\"")
-    print("[OuteTTS] Word timestamps (\(words.count) words):")
-    for (i, word) in words.enumerated() {
-      let duration = word.end - word.start
-      print("  [\(i)] \"\(word.word)\" start=\(String(format: "%.3f", word.start))s end=\(String(format: "%.3f", word.end))s duration=\(String(format: "%.3f", duration))s")
-    }
-
     return (result.text, words)
   }
 }

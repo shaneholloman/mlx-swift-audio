@@ -69,7 +69,7 @@ func padOrTrim(_ array: MLXArray, length: Int = WhisperAudio.nSamples) -> MLXArr
 ///   - audio: Audio waveform (T,) in 16 kHz
 ///   - nMels: Number of Mel-frequency filters (varies by model: 80 for most, 128 for large-v3-turbo)
 ///   - padding: Number of zero samples to pad to the right
-/// - Returns: Log-Mel spectrogram (n_mels, n_frames)
+/// - Returns: Log-Mel spectrogram (n_frames, n_mels) - matches Python output shape
 func whisperLogMelSpectrogram(
   audio: MLXArray,
   nMels: Int,
@@ -95,22 +95,18 @@ func whisperLogMelSpectrogram(
     winLength: WhisperAudio.nFft
   )
 
-  // Swap axes to get (F, T) format for matrix multiplication with mel filters
-  // After swap: (n_fft//2 + 1, n_frames) = (201, n_frames)
-  let stftSwapped = stftResult.swappedAxes(0, 1)
-
-  // Remove the last frequency bin (Nyquist frequency) to match Python
-  // Python: freqs[:-1, :] removes last frequency bin, not time frames!
-  // Before: (201, n_frames), After: (200, n_frames)
-  let freqs = stftSwapped[0 ..< (WhisperAudio.nFft / 2), 0...]
+  // Python's audio.py does: freqs[:-1, :] which removes the last TIME FRAME (not frequency bin!)
+  // stftResult is (n_frames, 201), so [:-1, :] gives (n_frames-1, 201)
+  let freqs = stftResult[0 ..< (stftResult.shape[0] - 1), 0...]
 
   // Compute power spectrum (magnitude squared)
-  let magnitudes = MLX.pow(MLX.abs(freqs), 2)
+  // Python: magnitudes = freqs[:-1, :].abs().square()
+  let magnitudes = MLX.pow(MLX.abs(freqs), 2) // (n_frames-1, 201)
 
   // Create mel filterbank using Slaney scale (matches Python Whisper)
   // Python uses mel_scale=None which defaults to slaney, with norm="slaney"
   // melFilters returns (n_mels, n_fft/2 + 1) = (n_mels, 201)
-  let filtersRaw = melFilters(
+  let filters = melFilters(
     sampleRate: WhisperAudio.sampleRate,
     nFft: WhisperAudio.nFft,
     nMels: nMels,
@@ -118,15 +114,12 @@ func whisperLogMelSpectrogram(
     fMax: 8000.0
   )
 
-  // Trim the last frequency bin from filters to match magnitudes (200 bins)
-  // filters: (n_mels, 201) -> (n_mels, 200)
-  let filters = filtersRaw[0..., 0 ..< (WhisperAudio.nFft / 2)]
-
-  // Apply mel filterbank: (M, F) @ (F, T) -> (M, T)
-  // magnitudes is (F, T) = (200, n_frames) - 200 frequency bins after removing Nyquist
-  // filters is (M, F) = (n_mels, 200)
-  // result is (M, T) = (n_mels, n_frames)
-  let melSpec = MLX.matmul(filters, magnitudes)
+  // Apply mel filterbank: (T, F) @ (F, M) -> (T, M)
+  // Python: mel_spec = magnitudes @ filters.T
+  // magnitudes is (n_frames-1, 201)
+  // filters.T is (201, n_mels)
+  // result is (n_frames-1, n_mels)
+  let melSpec = MLX.matmul(magnitudes, filters.transposed())
 
   // Log scale with clipping (Whisper uses max - 8.0 clipping)
   var logSpec = MLX.log10(MLX.maximum(melSpec, MLXArray(1e-10)))

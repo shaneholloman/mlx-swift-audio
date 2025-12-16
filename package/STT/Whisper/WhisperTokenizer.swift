@@ -1,12 +1,50 @@
 import Foundation
 import SwiftTiktoken
 
+// MARK: - Language Constants
+
+/// Whisper supported languages (100 total)
+/// This is the single source of truth - matches Python's LANGUAGES dict exactly
+/// Order matters: index corresponds to token offset from sot+1
+let WHISPER_LANGUAGES: [(code: String, name: String)] = [
+  ("en", "english"), ("zh", "chinese"), ("de", "german"), ("es", "spanish"),
+  ("ru", "russian"), ("ko", "korean"), ("fr", "french"), ("ja", "japanese"),
+  ("pt", "portuguese"), ("tr", "turkish"), ("pl", "polish"), ("ca", "catalan"),
+  ("nl", "dutch"), ("ar", "arabic"), ("sv", "swedish"), ("it", "italian"),
+  ("id", "indonesian"), ("hi", "hindi"), ("fi", "finnish"), ("vi", "vietnamese"),
+  ("he", "hebrew"), ("uk", "ukrainian"), ("el", "greek"), ("ms", "malay"),
+  ("cs", "czech"), ("ro", "romanian"), ("da", "danish"), ("hu", "hungarian"),
+  ("ta", "tamil"), ("no", "norwegian"), ("th", "thai"), ("ur", "urdu"),
+  ("hr", "croatian"), ("bg", "bulgarian"), ("lt", "lithuanian"), ("la", "latin"),
+  ("mi", "maori"), ("ml", "malayalam"), ("cy", "welsh"), ("sk", "slovak"),
+  ("te", "telugu"), ("fa", "persian"), ("lv", "latvian"), ("bn", "bengali"),
+  ("sr", "serbian"), ("az", "azerbaijani"), ("sl", "slovenian"), ("kn", "kannada"),
+  ("et", "estonian"), ("mk", "macedonian"), ("br", "breton"), ("eu", "basque"),
+  ("is", "icelandic"), ("hy", "armenian"), ("ne", "nepali"), ("mn", "mongolian"),
+  ("bs", "bosnian"), ("kk", "kazakh"), ("sq", "albanian"), ("sw", "swahili"),
+  ("gl", "galician"), ("mr", "marathi"), ("pa", "punjabi"), ("si", "sinhala"),
+  ("km", "khmer"), ("sn", "shona"), ("yo", "yoruba"), ("so", "somali"),
+  ("af", "afrikaans"), ("oc", "occitan"), ("ka", "georgian"), ("be", "belarusian"),
+  ("tg", "tajik"), ("sd", "sindhi"), ("gu", "gujarati"), ("am", "amharic"),
+  ("yi", "yiddish"), ("lo", "lao"), ("uz", "uzbek"), ("fo", "faroese"),
+  ("ht", "haitian creole"), ("ps", "pashto"), ("tk", "turkmen"), ("nn", "nynorsk"),
+  ("mt", "maltese"), ("sa", "sanskrit"), ("lb", "luxembourgish"), ("my", "myanmar"),
+  ("bo", "tibetan"), ("tl", "tagalog"), ("mg", "malagasy"), ("as", "assamese"),
+  ("tt", "tatar"), ("haw", "hawaiian"), ("ln", "lingala"), ("ha", "hausa"),
+  ("ba", "bashkir"), ("jw", "javanese"), ("su", "sundanese"), ("yue", "cantonese"),
+]
+
+/// Number of supported languages
+let WHISPER_NUM_LANGUAGES = WHISPER_LANGUAGES.count // 100
+
+// MARK: - WhisperTokenizer
+
 /// Whisper tokenizer using SwiftTiktoken for BPE tokenization
 ///
 /// Provides quick access to special tokens and language-specific encoding.
 /// Token IDs differ between multilingual and English-only models:
-/// - Multilingual: eot=50257, sot=50258, 99 language tokens, timestamp_begin=50364
-/// - English-only: eot=50256, sot=50257, NO language tokens, timestamp_begin=50363
+/// - Multilingual: eot=50257, sot=50258, 100 language tokens, transcribe=50360, timestamp_begin=50365
+/// - English-only: eot=50256, sot=50257, 100 language tokens, transcribe=50359, timestamp_begin=50364
 class WhisperTokenizer {
   private let encoding: CoreBPE
   private let specialTokens: [String: Int]
@@ -37,8 +75,8 @@ class WhisperTokenizer {
 
     eot = nextId; nextId += 1
     sot = nextId; nextId += 1
-    // Skip 99 language tokens
-    nextId += 99
+    // Skip language tokens (sot+1 to sot+WHISPER_NUM_LANGUAGES)
+    nextId += WHISPER_NUM_LANGUAGES
     translate = nextId; nextId += 1
     transcribe = nextId; nextId += 1
     sotLm = nextId; nextId += 1
@@ -62,7 +100,7 @@ class WhisperTokenizer {
     // Whisper has two vocabulary files:
     // 1. multilingual.tiktoken - Used by multilingual Whisper models (tiny, base, small, medium, large-v3, large-v3-turbo)
     //    Contains 50,257 base vocabulary tokens optimized for multilingual speech recognition
-    //    and translation across 99 languages
+    //    and translation across 100 languages
     //
     // 2. gpt2.tiktoken - Used by English-only Whisper models (tiny.en, base.en, small.en, medium.en)
     //    Contains the standard GPT-2 vocabulary (50,256 tokens) for English-only transcription
@@ -170,12 +208,12 @@ class WhisperTokenizer {
   /// Build all Whisper special tokens
   ///
   /// Mirrors Python's get_encoding() function. Both multilingual and English-only
-  /// tokenizers include 99 language tokens in the vocabulary. The difference is:
+  /// tokenizers include 100 language tokens in the vocabulary. The difference is:
   /// - Multilingual (multilingual.tiktoken): base vocab 50257, starts special at 50257
   /// - English-only (gpt2.tiktoken): base vocab 50256, starts special at 50256
   ///
   /// Special token order (from Python):
-  /// endoftext, startoftranscript, [99 language tokens], translate, transcribe,
+  /// endoftext, startoftranscript, [100 language tokens], translate, transcribe,
   /// startoflm, startofprev, nospeech, notimestamps, [1501 timestamp tokens]
   private static func buildSpecialTokens(isMultilingual: Bool) -> [String: Int] {
     var tokens: [String: Int] = [:]
@@ -192,23 +230,9 @@ class WhisperTokenizer {
     tokens["<|startoftranscript|>"] = nextTokenId
     nextTokenId += 1
 
-    // Language tokens: <|en|>, <|zh|>, etc. (99 languages)
-    // Both multilingual and English-only tokenizers include these in the vocab
-    let languageCodes = [
-      "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr",
-      "pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi",
-      "he", "uk", "el", "ms", "cs", "ro", "da", "hu", "ta", "no",
-      "th", "ur", "hr", "bg", "lt", "la", "mi", "ml", "cy", "sk",
-      "te", "fa", "lv", "bn", "sr", "az", "sl", "kn", "et", "mk",
-      "br", "eu", "is", "hy", "ne", "mn", "bs", "kk", "sq", "sw",
-      "gl", "mr", "pa", "si", "km", "sn", "yo", "so", "af", "oc",
-      "ka", "be", "tg", "sd", "gu", "am", "yi", "lo", "uz", "fo",
-      "ht", "ps", "tk", "nn", "mt", "sa", "lb", "my", "bo", "tl",
-      "mg", "as", "tt", "haw", "ln", "ha", "ba", "jw", "su",
-    ]
-
-    for lang in languageCodes {
-      tokens["<|\(lang)|>"] = nextTokenId
+    // Language tokens: <|en|>, <|zh|>, etc. (uses WHISPER_LANGUAGES as single source of truth)
+    for lang in WHISPER_LANGUAGES {
+      tokens["<|\(lang.code)|>"] = nextTokenId
       nextTokenId += 1
     }
 
@@ -371,10 +395,44 @@ class WhisperTokenizer {
   /// - Parameter token: Token ID
   /// - Returns: True if token is a language token
   func isLanguageToken(_ token: Int) -> Bool {
-    // Language tokens start at sot + 1 and span 99 tokens
+    // Language tokens: sot+1 to sot+WHISPER_NUM_LANGUAGES (inclusive)
     let languageTokenStart = sot + 1
-    let languageTokenEnd = sot + 100 // Exclusive (99 language tokens)
+    let languageTokenEnd = sot + 1 + WHISPER_NUM_LANGUAGES // Exclusive
     return token >= languageTokenStart && token < languageTokenEnd
+  }
+
+  /// Get all language token IDs
+  ///
+  /// - Returns: Array of language token IDs (sot+1 to sot+WHISPER_NUM_LANGUAGES)
+  var allLanguageTokens: [Int] {
+    (0 ..< WHISPER_NUM_LANGUAGES).map { sot + 1 + $0 }
+  }
+
+  /// Get language code for a language token
+  ///
+  /// - Parameter token: Language token ID
+  /// - Returns: Language code (e.g., "en") or nil if not a language token
+  func languageCode(forToken token: Int) -> String? {
+    let index = token - sot - 1
+    guard index >= 0, index < WHISPER_NUM_LANGUAGES else { return nil }
+    return WHISPER_LANGUAGES[index].code
+  }
+
+  /// Get language code for an index (0-99)
+  ///
+  /// - Parameter index: Language index
+  /// - Returns: Language code (e.g., "en") or nil if out of range
+  func languageCode(forIndex index: Int) -> String? {
+    guard index >= 0, index < WHISPER_NUM_LANGUAGES else { return nil }
+    return WHISPER_LANGUAGES[index].code
+  }
+
+  /// Get language token for a language index
+  ///
+  /// - Parameter index: Language index (0-99)
+  /// - Returns: Token ID for the language
+  func languageTokenId(forIndex index: Int) -> Int {
+    sot + 1 + index
   }
 
   /// Check if a token is a timestamp token
@@ -453,8 +511,10 @@ class WhisperTokenizer {
   /// Split tokens into word-level groups for word timestamp alignment
   ///
   /// This method implements language-aware word splitting:
-  /// - For CJK languages (Chinese, Japanese, Korean): character-level splitting
+  /// - For space-less scripts (CJK, Thai, Lao, Myanmar): character-level splitting
   /// - For other languages (Latin, Cyrillic, etc.): whitespace-based splitting
+  ///
+  /// Matches Python's behavior: `{"zh", "ja", "th", "lo", "my", "yue"}` use character splitting
   ///
   /// - Parameter tokens: Token IDs (may include EOT at end)
   /// - Returns: Tuple of (words, token groups per word)
@@ -469,34 +529,43 @@ class WhisperTokenizer {
       return ([], [])
     }
 
-    // Decode to check if this is CJK-heavy text
+    // Decode to check if this is space-less script text
+    // (Chinese, Japanese, Korean, Thai, Lao, Myanmar)
     let decoded = decode(textTokens)
-    let isCJK = decoded.unicodeScalars.filter { isCJKCharacter($0) }.count > decoded.count / 2
+    let isSpacelessScript = decoded.unicodeScalars.filter { isSpacelessScriptCharacter($0) }.count > decoded.count / 2
 
-    if isCJK {
-      return splitCJK(tokens)
+    if isSpacelessScript {
+      return splitCharacterLevel(tokens)
     } else {
       return splitByWhitespace(tokens)
     }
   }
 
-  /// Check if a Unicode scalar is a CJK character
+  /// Check if a Unicode scalar is from a space-less script
+  ///
+  /// Space-less scripts don't use whitespace between words and require
+  /// character-level splitting for word timestamps. This matches Python's
+  /// language list: `{"zh", "ja", "th", "lo", "my", "yue"}`
   @inline(__always)
-  private func isCJKCharacter(_ scalar: Unicode.Scalar) -> Bool {
+  private func isSpacelessScriptCharacter(_ scalar: Unicode.Scalar) -> Bool {
     let value = scalar.value
-    return (0x4E00 ... 0x9FFF).contains(value) || // CJK Unified Ideographs
+    return (0x4E00 ... 0x9FFF).contains(value) || // CJK Unified Ideographs (Chinese)
       (0x3400 ... 0x4DBF).contains(value) || // CJK Extension A
       (0x20000 ... 0x2A6DF).contains(value) || // CJK Extension B
-      (0x3040 ... 0x309F).contains(value) || // Hiragana
-      (0x30A0 ... 0x30FF).contains(value) || // Katakana
-      (0xAC00 ... 0xD7AF).contains(value) // Korean Hangul
+      (0x3040 ... 0x309F).contains(value) || // Hiragana (Japanese)
+      (0x30A0 ... 0x30FF).contains(value) || // Katakana (Japanese)
+      (0xAC00 ... 0xD7AF).contains(value) || // Korean Hangul
+      (0x0E00 ... 0x0E7F).contains(value) || // Thai
+      (0x0E80 ... 0x0EFF).contains(value) || // Lao
+      (0x1000 ... 0x109F).contains(value) // Myanmar
   }
 
-  /// Split CJK text character by character
+  /// Split space-less script text character by character
   ///
-  /// For CJK languages, each character is typically a meaningful unit,
-  /// so we split at the character level for more accurate timestamps.
-  private func splitCJK(_ tokens: [Int]) -> (words: [String], tokenGroups: [[Int]]) {
+  /// For space-less scripts (CJK, Thai, Lao, Myanmar), each character is
+  /// typically a meaningful unit, so we split at the character level for
+  /// more accurate timestamps.
+  private func splitCharacterLevel(_ tokens: [Int]) -> (words: [String], tokenGroups: [[Int]]) {
     var words: [String] = []
     var tokenGroups: [[Int]] = []
 

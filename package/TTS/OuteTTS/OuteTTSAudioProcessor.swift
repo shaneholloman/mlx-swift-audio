@@ -395,10 +395,6 @@ final class OuteTTSAudioProcessor {
 
     let audioData = processedAudio.asArray(Float.self)
 
-    // Debug: Print DAC encoding info
-    let audioDurationSec = Double(audioData.count) / Double(sampleRate)
-    print("[OuteTTS AudioProcessor] Audio duration: \(String(format: "%.3f", audioDurationSec))s, DAC codes: \(c1.count) tokens (\(String(format: "%.1f", Double(c1.count) / audioDurationSec)) tokens/sec)")
-
     for (idx, wordInfo) in words.enumerated() {
       // Match Python behavior: process ALL words, never skip
       // Even zero-duration words are included to maintain alignment between speaker.text and speaker.words
@@ -419,9 +415,6 @@ final class OuteTTSAudioProcessor {
 
       let wordC1 = Array(c1[start! ..< min(end, c1.count)])
       let wordC2 = Array(c2[start! ..< min(end, c2.count)])
-
-      // Debug: Print word code extraction
-      print("[OuteTTS AudioProcessor] Word \(idx) \"\(word)\": timestamp=\(String(format: "%.3f", wordInfo.start))-\(String(format: "%.3f", wordInfo.end))s -> DAC tokens [\(start!)-\(end)] = \(wordC1.count) codes")
 
       // Extract word audio segment
       let audioStart = Int(wordInfo.start * Double(sampleRate))
