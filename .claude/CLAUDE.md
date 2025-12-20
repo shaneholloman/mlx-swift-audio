@@ -20,7 +20,7 @@ This project includes a Swift MLX library and example apps for speech-to-text an
 
 ## Cloning Reference Repositories
 
-When referring to code from other repositories, for easy access to the source code, make a local clone of the repository in `/tmp` rather than using the web fetch or web search tools, which can be unreliable.
+When referring to code from other repositories that aren't available locally, for easy access to the source code, make a local clone of the repository in `/tmp` rather than using the web fetch or web search tools, which can be unreliable.
 
 ## Python MLX Implementations of Models
 
