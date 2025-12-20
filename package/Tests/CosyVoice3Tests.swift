@@ -73,7 +73,7 @@ struct CosyVoice3UnitTests {
 
     print("Loading CosyVoice3 model...")
     let loadStart = CFAbsoluteTimeGetCurrent()
-    let tts = try await CosyVoice3TTS.load(repoId: modelRepoId)
+    _ = try await CosyVoice3TTS.load(repoId: modelRepoId)
     let loadTime = CFAbsoluteTimeGetCurrent() - loadStart
     print("Model loaded in \(String(format: "%.2f", loadTime))s")
 
@@ -334,7 +334,7 @@ struct CosyVoice3IntegrationTests {
     print("  S3 tokenizer loaded in \(String(format: "%.2f", CFAbsoluteTimeGetCurrent() - s3Start))s")
 
     let whisperStart = CFAbsoluteTimeGetCurrent()
-    let whisper = await STT.whisper(model: .base, quantization: .q4)
+    let whisper = await STT.whisper(model: .largeTurbo, quantization: .q4)
     try await whisper.load()
     print("  Whisper loaded in \(String(format: "%.2f", CFAbsoluteTimeGetCurrent() - whisperStart))s")
 

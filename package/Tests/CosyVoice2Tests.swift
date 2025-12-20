@@ -165,7 +165,7 @@ struct CosyVoice2IntegrationTests {
     print("  S3 tokenizer loaded in \(String(format: "%.2f", CFAbsoluteTimeGetCurrent() - s3Start))s")
 
     let whisperStart = CFAbsoluteTimeGetCurrent()
-    let whisper = await STT.whisper(model: .base, quantization: .q4)
+    let whisper = await STT.whisper(model: .largeTurbo, quantization: .q4)
     try await whisper.load()
     print("  Whisper loaded in \(String(format: "%.2f", CFAbsoluteTimeGetCurrent() - whisperStart))s")
 

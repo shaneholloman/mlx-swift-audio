@@ -147,7 +147,7 @@ struct WhisperTests {
     let testAudioURL = try await TestAudioCache.downloadToFile(from: audioURL)
 
     // Use base model for reliable word timestamps
-    let engine = STT.whisper(model: .base, quantization: .q4)
+    let engine = STT.whisper(model: .largeTurbo, quantization: .q4)
     try await engine.load()
 
     // Transcribe with word-level timestamps
@@ -304,7 +304,7 @@ struct WhisperTests {
 
     // Test with whisper-base (multilingual) to verify seek-based processing
     // Use word timestamps for better hallucination detection
-    let engine = STT.whisper(model: .base, quantization: .q4)
+    let engine = STT.whisper(model: .largeTurbo, quantization: .q4)
     try await engine.load()
 
     print("Transcribing Gettysburg Address with word timestamps...")
@@ -368,7 +368,7 @@ struct WhisperTests {
     try FileManager.default.moveItem(at: tempFileURL, to: testAudioURL)
     defer { try? FileManager.default.removeItem(at: testAudioURL) }
 
-    let engine = STT.whisper(model: .base, quantization: .q4)
+    let engine = STT.whisper(model: .largeTurbo, quantization: .q4)
     try await engine.load()
 
     // Without word timestamps
