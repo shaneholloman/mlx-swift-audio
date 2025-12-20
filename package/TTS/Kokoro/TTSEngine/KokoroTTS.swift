@@ -137,8 +137,8 @@ actor KokoroTTS {
       let audioChunks = try await generateAudioChunks(text: sentence, voice: voice, speed: speed)
       for chunk in audioChunks {
         allAudio.append(contentsOf: chunk)
-        MLXMemory.clearCache()
       }
+      MLXMemory.clearCache()
     }
 
     let processingTime = CFAbsoluteTimeGetCurrent() - startTime
@@ -172,7 +172,6 @@ actor KokoroTTS {
         return nil
       }
       if let chunk = nextPending {
-        MLXMemory.clearCache()
         return chunk
       }
 
@@ -184,6 +183,7 @@ actor KokoroTTS {
       try Task.checkCancellation()
 
       let audioChunks = try await self.generateAudioChunks(text: sentences[i], voice: voice, speed: speed)
+      MLXMemory.clearCache()
 
       guard !audioChunks.isEmpty else { return nil }
 
@@ -194,7 +194,6 @@ actor KokoroTTS {
         }
       }
 
-      MLXMemory.clearCache()
       return audioChunks[0]
     }
   }

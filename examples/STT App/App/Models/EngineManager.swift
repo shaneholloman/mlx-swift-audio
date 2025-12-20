@@ -126,8 +126,6 @@ final class EngineManager {
     loadingProgress = 0
     error = nil
 
-    MLXMemory.configureForPlatform()
-
     do {
       whisperEngine = WhisperEngine(modelSize: modelSize, quantization: quantization)
 
@@ -168,8 +166,6 @@ final class EngineManager {
     isLoading = true
     loadingProgress = 0
     error = nil
-
-    MLXMemory.configureForPlatform()
 
     do {
       funASREngine = FunASREngine(variant: variant)

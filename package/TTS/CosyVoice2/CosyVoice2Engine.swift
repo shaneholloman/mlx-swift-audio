@@ -999,6 +999,7 @@ public final class CosyVoice2Engine: TTSEngine {
                 processingTime: Date().timeIntervalSince(startTime)
               )
               continuation.yield(chunk)
+              MLXMemory.clearCache()
             }
             continuation.finish()
           } catch is CancellationError {

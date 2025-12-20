@@ -13,25 +13,22 @@ import MLX
 ///
 /// ## Usage
 ///
-/// Configure memory limits before loading models:
+/// Clear cache between heavy operations:
 /// ```swift
-/// // Set a 512MB cache limit
-/// MLXMemory.configure(cacheLimit: 512 * 1024 * 1024)
-///
-/// // Or use platform-appropriate defaults
-/// MLXMemory.configureForPlatform()
-///
 /// // Load and use model...
 ///
 /// // Clear cache between heavy operations
 /// MLXMemory.clearCache()
 /// ```
 ///
-/// ## Platform Recommendations
+/// For memory-constrained scenarios (e.g., iOS with jetsam limits),
+/// you can optionally set a cache limit:
+/// ```swift
+/// MLXMemory.configure(cacheLimit: 512 * 1024 * 1024)
+/// ```
 ///
-/// - **iOS**: Use aggressive limits (256-512MB) due to jetsam memory limits
-/// - **macOS**: Can use more relaxed limits (512MB-1GB)
-/// - **Default**: No limit (MLX default behavior)
+/// Note: Setting cache limits can hurt performance by forcing buffer
+/// eviction and reallocation. Only use when memory is truly constrained.
 ///
 /// ## Monitoring
 ///
@@ -73,23 +70,6 @@ public enum MLXMemory {
       Memory.cacheLimit = limit
       Log.tts.debug("[MLXMemory] Cache limit set to \(limit / 1024 / 1024)MB")
     }
-  }
-
-  /// Configure memory limits appropriate for the current platform.
-  ///
-  /// - iOS: 512MB cache limit (conservative for jetsam)
-  /// - macOS: 1GB cache limit (more relaxed)
-  public static func configureForPlatform() {
-    #if os(iOS)
-    // iOS: Conservative limit due to jetsam
-    configure(cacheLimit: 512 * 1024 * 1024)
-    #elseif os(macOS)
-    // macOS: More relaxed limit
-    configure(cacheLimit: 1024 * 1024 * 1024)
-    #else
-    // Other platforms: Use default (no limit)
-    Log.tts.debug("[MLXMemory] No cache limit set for this platform")
-    #endif
   }
 
   /// Clear the GPU buffer cache.

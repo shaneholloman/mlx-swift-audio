@@ -95,6 +95,7 @@ final class EngineManager {
     let previousEngine = currentEngine
     if previousEngine.isLoaded {
       await previousEngine.unload() // unload() calls stop() internally
+      MLXMemory.clearCache()
     } else {
       await previousEngine.stop() // Just stop playback if not loaded
     }
@@ -113,8 +114,6 @@ final class EngineManager {
     isLoading = true
     loadingProgress = 0
     error = nil
-
-    MLXMemory.configureForPlatform()
 
     do {
       try await currentEngine.load { [weak self] progress in

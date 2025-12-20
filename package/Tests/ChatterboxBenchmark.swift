@@ -10,13 +10,6 @@ import Testing
 
 // MARK: - Memory Management
 
-/// Configure GPU memory limits to prevent runaway memory growth during benchmarks.
-private func configureMemoryLimits() {
-  // Use library's memory configuration utility
-  MLXMemory.configure(cacheLimit: 512 * 1024 * 1024)
-  MLXMemory.logStats(prefix: "Initial")
-}
-
 /// Clear GPU cache between benchmark runs to prevent memory accumulation
 private func clearMemoryBetweenRuns() {
   MLXMemory.clearCache()
@@ -53,9 +46,6 @@ struct ChatterboxBenchmark {
     print("=" * 60)
     print("Chatterbox Pipeline Benchmark (Swift MLX)")
     print("=" * 60)
-
-    // Configure memory limits FIRST to prevent runaway growth
-    configureMemoryLimits()
 
     print("\nRandom seed: \(Self.seed)")
     print("Test text: \"\(Self.testText)\"")
