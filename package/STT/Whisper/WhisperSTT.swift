@@ -44,8 +44,11 @@ actor WhisperSTT {
 
     // Then load tokenizer (fast operation) with correct vocabulary for model type
     // Pass model directory so tokenizer can find vocab files bundled with the model
+    // numLanguages must match the model's actual language count (from n_vocab)
+    // Different models have different counts (base: 99, large-v3-turbo: 100)
     let tokenizer = try await WhisperTokenizer.load(
       isMultilingual: model.isMultilingual,
+      numLanguages: model.numLanguages,
       modelDirectory: model.modelDirectory
     )
 
@@ -72,20 +75,18 @@ actor WhisperSTT {
       )
     }
 
-    // Verify critical token IDs match expected values based on model type
-    // Multilingual: eot=50257, sot=50258, transcribe=50360, timestamp_begin=50365
-    // English-only: eot=50256, sot=50257, transcribe=50359, timestamp_begin=50364
-    if model.isMultilingual {
-      assert(tokenizer.eot == 50257, "Multilingual EOT token must be 50257")
-      assert(tokenizer.sot == 50258, "Multilingual SOT token must be 50258")
-      assert(tokenizer.transcribe == 50360, "Multilingual transcribe token must be 50360")
-      assert(tokenizer.timestampBegin == 50365, "Multilingual timestamp_begin must be 50365")
-    } else {
-      assert(tokenizer.eot == 50256, "English-only EOT token must be 50256")
-      assert(tokenizer.sot == 50257, "English-only SOT token must be 50257")
-      assert(tokenizer.transcribe == 50359, "English-only transcribe token must be 50359")
-      assert(tokenizer.timestampBegin == 50364, "English-only timestamp_begin must be 50364")
-    }
+    // Verify critical token IDs are consistent with model's numLanguages
+    // Token IDs depend on numLanguages which varies by model (base: 99, large-v3-turbo: 100)
+    let expectedBaseVocab = model.isMultilingual ? 50257 : 50256
+    let expectedEot = expectedBaseVocab
+    let expectedSot = expectedBaseVocab + 1
+    let expectedTranscribe = expectedSot + 1 + model.numLanguages + 1 // sot + numLangs + translate + transcribe
+    let expectedTimestampBegin = expectedTranscribe + 5 // transcribe + sotLm + sotPrev + noSpeech + noTimestamps + first_timestamp
+
+    assert(tokenizer.eot == expectedEot, "EOT token mismatch: got \(tokenizer.eot), expected \(expectedEot)")
+    assert(tokenizer.sot == expectedSot, "SOT token mismatch: got \(tokenizer.sot), expected \(expectedSot)")
+    assert(tokenizer.transcribe == expectedTranscribe, "Transcribe token mismatch: got \(tokenizer.transcribe), expected \(expectedTranscribe)")
+    assert(tokenizer.timestampBegin == expectedTimestampBegin, "TimestampBegin mismatch: got \(tokenizer.timestampBegin), expected \(expectedTimestampBegin)")
 
     return WhisperSTT(model: model, tokenizer: tokenizer)
   }
@@ -675,10 +676,10 @@ actor WhisperSTT {
     let (logits, _, _) = model.decode(sotToken, audioFeatures: audioFeatures)
 
     // Extract language token logits
-    // Language tokens start at sot + 1 and span WHISPER_NUM_LANGUAGES (100) tokens
-    // Multilingual: 50259-50358, English-only: 50258-50357
+    // Language tokens start at sot + 1 and span numLanguages tokens
+    // (base: 99, large-v3-turbo: 100)
     let languageTokenStart = tokenizer.sot + 1
-    let languageTokenEnd = tokenizer.sot + 1 + WHISPER_NUM_LANGUAGES // Exclusive
+    let languageTokenEnd = tokenizer.sot + 1 + tokenizer.numLanguages
     let languageLogits = logits[0, 0, languageTokenStart ..< languageTokenEnd]
 
     // Find language with highest probability

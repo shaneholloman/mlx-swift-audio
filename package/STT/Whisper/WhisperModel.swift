@@ -245,8 +245,8 @@ class WhisperModel: Module {
     // Get logits for the first token after SOT
     let (logits, _, _) = decode(sotToken, audioFeatures: audioFeatures)
 
-    // Get language token logits (100 language tokens)
-    let languageTokenEnd = languageTokenStart + WHISPER_NUM_LANGUAGES
+    // Get language token logits (numLanguages tokens, not hardcoded 100)
+    let languageTokenEnd = languageTokenStart + numLanguages
     let languageLogits = logits[0, 0, languageTokenStart ..< languageTokenEnd]
 
     // Find the language with highest probability
@@ -254,9 +254,10 @@ class WhisperModel: Module {
     let maxIdx = MLX.argMax(probs).item(Int32.self)
     let maxProb = probs[Int(maxIdx)].item(Float.self)
 
-    // Map index to language code using WHISPER_LANGUAGES (single source of truth)
+    // Map index to language code using WHISPER_LANGUAGES
     let languageIdx = Int(maxIdx)
-    let languageCode = languageIdx < WHISPER_NUM_LANGUAGES ? WHISPER_LANGUAGES[languageIdx].code : "en"
+    let languageCode = languageIdx < numLanguages && languageIdx < WHISPER_LANGUAGES.count
+      ? WHISPER_LANGUAGES[languageIdx].code : "en"
 
     return (languageCode, maxProb)
   }

@@ -39,21 +39,23 @@ let WHISPER_LANGUAGES: [(code: String, name: String)] = [
   ("ba", "bashkir"), ("jw", "javanese"), ("su", "sundanese"), ("yue", "cantonese"),
 ]
 
-/// Number of supported languages
-let WHISPER_NUM_LANGUAGES = WHISPER_LANGUAGES.count // 100
-
 // MARK: - WhisperTokenizer
 
 /// Whisper tokenizer using SwiftTiktoken for BPE tokenization
 ///
 /// Provides quick access to special tokens and language-specific encoding.
-/// Token IDs differ between multilingual and English-only models:
-/// - Multilingual: eot=50257, sot=50258, 100 language tokens, transcribe=50360, timestamp_begin=50365
-/// - English-only: eot=50256, sot=50257, 100 language tokens, transcribe=50359, timestamp_begin=50364
+/// Token IDs differ between multilingual and English-only models, AND depend on numLanguages:
+/// - Base multilingual (99 langs): eot=50257, sot=50258, transcribe=50359, timestamp_begin=50364
+/// - Large-v3-turbo (100 langs): eot=50257, sot=50258, transcribe=50360, timestamp_begin=50365
+/// - English-only: eot=50256, sot=50257, transcribe=50359, timestamp_begin=50364
 class WhisperTokenizer {
   private let encoding: CoreBPE
   private let specialTokens: [String: Int]
   let isMultilingual: Bool
+
+  /// Number of languages supported by this tokenizer (from model's n_vocab)
+  /// Different models have different counts: base=99, large-v3-turbo=100
+  let numLanguages: Int
 
   // Special token IDs - set based on whether this is multilingual or English-only
   // These values must match Python mlx-audio tokenizer exactly
@@ -67,21 +69,23 @@ class WhisperTokenizer {
   let noTimestamps: Int
   let timestampBegin: Int
 
-  private init(encoding: CoreBPE, specialTokens: [String: Int], isMultilingual: Bool) {
+  private init(encoding: CoreBPE, specialTokens: [String: Int], isMultilingual: Bool, numLanguages: Int) {
     self.encoding = encoding
     self.specialTokens = specialTokens
     self.isMultilingual = isMultilingual
+    self.numLanguages = numLanguages
 
     // Compute token IDs dynamically to match Python's get_encoding()
     // Both multilingual and English-only have the same structure, just offset by 1
     // due to different base vocab sizes (50257 vs 50256)
+    // Must use numLanguages from model config, not a hardcoded value
     let baseVocabSize = isMultilingual ? 50257 : 50256
     var nextId = baseVocabSize
 
     eot = nextId; nextId += 1
     sot = nextId; nextId += 1
-    // Skip language tokens (sot+1 to sot+WHISPER_NUM_LANGUAGES)
-    nextId += WHISPER_NUM_LANGUAGES
+    // Skip language tokens - use model's numLanguages, not hardcoded value
+    nextId += numLanguages
     translate = nextId; nextId += 1
     transcribe = nextId; nextId += 1
     sotLm = nextId; nextId += 1
@@ -99,9 +103,10 @@ class WhisperTokenizer {
   ///
   /// - Parameters:
   ///   - isMultilingual: Whether to load multilingual or English-only vocabulary
+  ///   - numLanguages: Number of languages supported by the model (computed from n_vocab)
   ///   - modelDirectory: Optional path to model directory containing vocab files
   /// - Returns: Initialized tokenizer
-  static func load(isMultilingual: Bool, modelDirectory: URL? = nil) async throws -> WhisperTokenizer {
+  static func load(isMultilingual: Bool, numLanguages: Int, modelDirectory: URL? = nil) async throws -> WhisperTokenizer {
     // Whisper has two vocabulary files:
     // 1. multilingual.tiktoken - Used by multilingual Whisper models (tiny, base, small, medium, large-v3, large-v3-turbo)
     //    Contains 50,257 base vocabulary tokens optimized for multilingual speech recognition
@@ -156,7 +161,8 @@ class WhisperTokenizer {
 
     // Build Whisper-specific special tokens (these are added AFTER the base vocab)
     // Token IDs differ between multilingual and English-only models
-    let specialTokens = buildSpecialTokens(isMultilingual: isMultilingual)
+    // numLanguages is computed from the model's n_vocab to match the actual model
+    let specialTokens = buildSpecialTokens(isMultilingual: isMultilingual, numLanguages: numLanguages)
 
     // Convert to UInt32 for SwiftTiktoken
     let specialTokensUInt32 = specialTokens.mapValues { UInt32($0) }
@@ -171,7 +177,7 @@ class WhisperTokenizer {
       pattern: pattern
     )
 
-    return WhisperTokenizer(encoding: whisperEncoding, specialTokens: specialTokens, isMultilingual: isMultilingual)
+    return WhisperTokenizer(encoding: whisperEncoding, specialTokens: specialTokens, isMultilingual: isMultilingual, numLanguages: numLanguages)
   }
 
   /// Parse tiktoken BPE format
@@ -218,9 +224,15 @@ class WhisperTokenizer {
   /// - English-only (gpt2.tiktoken): base vocab 50256, starts special at 50256
   ///
   /// Special token order (from Python):
-  /// endoftext, startoftranscript, [100 language tokens], translate, transcribe,
+  /// endoftext, startoftranscript, [numLanguages language tokens], translate, transcribe,
   /// startoflm, startofprev, nospeech, notimestamps, [1501 timestamp tokens]
-  private static func buildSpecialTokens(isMultilingual: Bool) -> [String: Int] {
+  ///
+  /// IMPORTANT: numLanguages must match the model's actual language count (computed from n_vocab).
+  /// Different Whisper models have different numbers of languages:
+  /// - whisper-base: 98 languages
+  /// - whisper-large-v3-turbo: 99 languages
+  /// Using a hardcoded count causes token ID misalignment and broken transcription.
+  private static func buildSpecialTokens(isMultilingual: Bool, numLanguages: Int) -> [String: Int] {
     var tokens: [String: Int] = [:]
 
     // Base vocab size determines where special tokens start
@@ -235,10 +247,18 @@ class WhisperTokenizer {
     tokens["<|startoftranscript|>"] = nextTokenId
     nextTokenId += 1
 
-    // Language tokens: <|en|>, <|zh|>, etc. (uses WHISPER_LANGUAGES as single source of truth)
-    for lang in WHISPER_LANGUAGES {
+    // Language tokens: <|en|>, <|zh|>, etc.
+    // Use numLanguages from model config, not hardcoded WHISPER_LANGUAGES.count
+    let languagesToAdd = min(numLanguages, WHISPER_LANGUAGES.count)
+    for i in 0 ..< languagesToAdd {
+      let lang = WHISPER_LANGUAGES[i]
       tokens["<|\(lang.code)|>"] = nextTokenId
       nextTokenId += 1
+    }
+    // Skip any remaining language slots if numLanguages > WHISPER_LANGUAGES.count
+    // (unlikely but handles edge case gracefully)
+    if numLanguages > WHISPER_LANGUAGES.count {
+      nextTokenId += numLanguages - WHISPER_LANGUAGES.count
     }
 
     // Task and control tokens
@@ -400,17 +420,17 @@ class WhisperTokenizer {
   /// - Parameter token: Token ID
   /// - Returns: True if token is a language token
   func isLanguageToken(_ token: Int) -> Bool {
-    // Language tokens: sot+1 to sot+WHISPER_NUM_LANGUAGES (inclusive)
+    // Language tokens: sot+1 to sot+numLanguages (exclusive)
     let languageTokenStart = sot + 1
-    let languageTokenEnd = sot + 1 + WHISPER_NUM_LANGUAGES // Exclusive
+    let languageTokenEnd = sot + 1 + numLanguages
     return token >= languageTokenStart && token < languageTokenEnd
   }
 
   /// Get all language token IDs
   ///
-  /// - Returns: Array of language token IDs (sot+1 to sot+WHISPER_NUM_LANGUAGES)
+  /// - Returns: Array of language token IDs (sot+1 to sot+numLanguages)
   var allLanguageTokens: [Int] {
-    (0 ..< WHISPER_NUM_LANGUAGES).map { sot + 1 + $0 }
+    (0 ..< numLanguages).map { sot + 1 + $0 }
   }
 
   /// Get language code for a language token
@@ -419,16 +439,16 @@ class WhisperTokenizer {
   /// - Returns: Language code (e.g., "en") or nil if not a language token
   func languageCode(forToken token: Int) -> String? {
     let index = token - sot - 1
-    guard index >= 0, index < WHISPER_NUM_LANGUAGES else { return nil }
+    guard index >= 0, index < numLanguages, index < WHISPER_LANGUAGES.count else { return nil }
     return WHISPER_LANGUAGES[index].code
   }
 
-  /// Get language code for an index (0-99)
+  /// Get language code for an index
   ///
   /// - Parameter index: Language index
   /// - Returns: Language code (e.g., "en") or nil if out of range
   func languageCode(forIndex index: Int) -> String? {
-    guard index >= 0, index < WHISPER_NUM_LANGUAGES else { return nil }
+    guard index >= 0, index < numLanguages, index < WHISPER_LANGUAGES.count else { return nil }
     return WHISPER_LANGUAGES[index].code
   }
 

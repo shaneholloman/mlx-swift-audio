@@ -98,12 +98,6 @@ class GreedyDecoder {
     let audioFeatures = model.encode(mel)
     eval(audioFeatures) // Ensure audio features are fully computed
 
-    // Verify audio features are valid (not zero/constant)
-    let afStd = audioFeatures.variance().sqrt().item(Float.self)
-    if afStd < 0.01 {
-      Log.model.error("⚠️  Audio features have very low variance!")
-    }
-
     // Build initial token sequence
     // If prompt tokens are provided, prepend them with <|startofprev|>
     // This matches Python's behavior for condition_on_previous_text
@@ -344,11 +338,16 @@ class GreedyDecoder {
         nextToken = sampleFromDistribution(probs)
       }
 
-      // Track log probability
-      let logProbs = MLX.log(MLX.softmax(lastLogits, axis: -1))
-      let logProb = logProbs[nextToken].item(Float.self)
-      sumLogProb += logProb
-      tokenCount += 1
+      // Track log probability (skip EOT tokens to match Python line 274:
+      // sum_logprobs += current_logprobs * (tokens[:, -1] != self.eot))
+      // The avgLogProb metric should only include actual content tokens, not EOT.
+      // Including EOT skews the metric and causes incorrect temperature fallback decisions.
+      if nextToken != tokenizer.eot {
+        let logProbs = MLX.log(MLX.softmax(lastLogits, axis: -1))
+        let logProb = logProbs[nextToken].item(Float.self)
+        sumLogProb += logProb
+        tokenCount += 1
+      }
 
       // Add token to sequence
       tokens.append(nextToken)
