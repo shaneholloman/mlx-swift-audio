@@ -386,17 +386,19 @@ class Qwen2LM: Module {
     var cache: [KVCacheSimple]? = nil
     var currentInput = lmInput
 
-    // Initial forward pass (prefill)
-    var (yPred, newCache) = llm.forwardOneStep(currentInput, cache: cache)
-    cache = newCache
-
     for i in 0 ..< maxLen {
-      // Get logits for last position
-      let lastIdx = yPred.shape[1] - 1
-      let logits = llmDecoder(yPred[0..., lastIdx, 0...])
+      // Forward pass
+      let (yPred, newCache) = llm.forwardOneStep(currentInput, cache: cache)
+      cache = newCache
+
+      // Pipeline: start async eval immediately after forward
+      asyncEval(yPred, cache)
+
+      // Get logits for last position (forces eval of yPred)
+      let logits = llmDecoder(yPred[0..., yPred.shape[1] - 1, 0...])
       let logp = MLX.log(MLX.softmax(logits, axis: -1))
 
-      // Sample next token
+      // Sample next token (.item() forces eval)
       let topIds = try samplingIds(
         weightedScores: logp.reshaped(-1),
         decodedTokens: outTokens,
@@ -409,26 +411,16 @@ class Qwen2LM: Module {
         break
       }
 
+      // Prepare input for next step
+      currentInput = speechEmbedding.weight[topIds].reshaped(1, 1, -1)
+
       // Skip special tokens (fill_token, etc.) - don't yield them
       if topIds > speechTokenSize {
-        // Still need to forward pass for next iteration
-        currentInput = speechEmbedding.weight[topIds].reshaped(1, 1, -1)
-        (yPred, newCache) = llm.forwardOneStep(currentInput, cache: cache)
-        cache = newCache
-        asyncEval(yPred, cache)
         continue
       }
 
       // Add the token
       outTokens.append(topIds)
-
-      // Forward pass for next step
-      currentInput = speechEmbedding.weight[topIds].reshaped(1, 1, -1)
-      (yPred, newCache) = llm.forwardOneStep(currentInput, cache: cache)
-      cache = newCache
-
-      // Pipeline: evaluate async while preparing next iteration
-      asyncEval(yPred, cache)
     }
 
     return outTokens

@@ -393,26 +393,20 @@ class CosyVoice3LM: Module {
     var cache: [KVCacheSimple]? = nil
     var currentInput = lmInput
 
-    print("[LLM] Starting inference: minLen=\(minLen), maxLen=\(maxLen), inputShape=\(lmInput.shape)")
-    let startTime = CFAbsoluteTimeGetCurrent()
-
-    // Initial forward pass (prefill)
-    var (yPred, newCache) = llm.forwardOneStep(currentInput, cache: cache)
-    cache = newCache
-
     for i in 0 ..< maxLen {
-      // Debug: print progress every 10 tokens or at the start
-      if i == 0 || (i + 1) % 10 == 0 {
-        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-        print("[LLM] Token \(i + 1)/\(maxLen), elapsed: \(String(format: "%.2f", elapsed))s")
-      }
+      // Forward pass
+      let (yPred, newCache) = llm.forwardOneStep(currentInput, cache: cache)
+      cache = newCache
 
-      // Get logits for last position
-      let lastIdx = yPred.shape[1] - 1
-      let logits = llmDecoder(yPred[0..., lastIdx, 0...])
+      // Pipeline: start async eval immediately after forward
+      // This allows GPU to work while CPU does logits/sampling below
+      asyncEval(yPred, cache)
+
+      // Get logits for last position (forces eval of yPred)
+      let logits = llmDecoder(yPred[0..., yPred.shape[1] - 1, 0...])
       let logp = MLX.log(MLX.softmax(logits, axis: -1))
 
-      // Sample next token
+      // Sample next token (.item() forces eval)
       let topIds = try samplingIds(
         weightedScores: logp.reshaped(-1),
         decodedTokens: outTokens,
@@ -422,26 +416,16 @@ class CosyVoice3LM: Module {
 
       // Check for any stop token (EOS or any extended vocab token)
       if topIds >= speechTokenSize {
-        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-        print("[LLM] EOS detected at token \(i + 1), id=\(topIds), speechTokenSize=\(speechTokenSize)")
-        print("[LLM] Generated \(outTokens.count) tokens in \(String(format: "%.2f", elapsed))s")
         break
       }
 
       // Add the token
       outTokens.append(topIds)
 
-      // Forward pass for next step
+      // Prepare input for next step
       currentInput = speechEmbedding.weight[topIds].reshaped(1, 1, -1)
-      (yPred, newCache) = llm.forwardOneStep(currentInput, cache: cache)
-      cache = newCache
-
-      // Pipeline: evaluate async while preparing next iteration
-      asyncEval(yPred, cache)
     }
 
-    let totalElapsed = CFAbsoluteTimeGetCurrent() - startTime
-    print("[LLM] Inference complete: \(outTokens.count) tokens in \(String(format: "%.2f", totalElapsed))s")
     return outTokens
   }
 
@@ -500,17 +484,19 @@ class CosyVoice3LM: Module {
     var cache: [KVCacheSimple]? = nil
     var currentInput = lmInput
 
-    // Initial forward pass (prefill)
-    var (yPred, newCache) = llm.forwardOneStep(currentInput, cache: cache)
-    cache = newCache
-
     for i in 0 ..< maxLen {
-      // Get logits for last position
-      let lastIdx = yPred.shape[1] - 1
-      let logits = llmDecoder(yPred[0..., lastIdx, 0...])
+      // Forward pass
+      let (yPred, newCache) = llm.forwardOneStep(currentInput, cache: cache)
+      cache = newCache
+
+      // Pipeline: start async eval immediately after forward
+      asyncEval(yPred, cache)
+
+      // Get logits for last position (forces eval of yPred)
+      let logits = llmDecoder(yPred[0..., yPred.shape[1] - 1, 0...])
       let logp = MLX.log(MLX.softmax(logits, axis: -1))
 
-      // Sample next token
+      // Sample next token (.item() forces eval)
       let topIds = try samplingIds(
         weightedScores: logp.reshaped(-1),
         decodedTokens: outTokens,
@@ -526,13 +512,8 @@ class CosyVoice3LM: Module {
       // Add the token
       outTokens.append(topIds)
 
-      // Forward pass for next step
+      // Prepare input for next step
       currentInput = speechEmbedding.weight[topIds].reshaped(1, 1, -1)
-      (yPred, newCache) = llm.forwardOneStep(currentInput, cache: cache)
-      cache = newCache
-
-      // Pipeline: evaluate async while preparing next iteration
-      asyncEval(yPred, cache)
     }
 
     return outTokens
