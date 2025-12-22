@@ -262,7 +262,7 @@ class FunASRModel: Module {
 
     // Load config
     let configURL = modelDirectory.appending(path: "config.json")
-    var config: FunASRConfig = if FileManager.default.fileExists(atPath: configURL.path) {
+    let config: FunASRConfig = if FileManager.default.fileExists(atPath: configURL.path) {
       try FunASRConfig.load(from: configURL)
     } else {
       // Use defaults

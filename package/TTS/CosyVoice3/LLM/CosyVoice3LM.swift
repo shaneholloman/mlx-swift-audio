@@ -400,7 +400,7 @@ class CosyVoice3LM: Module {
 
       // Pipeline: start async eval immediately after forward
       // This allows GPU to work while CPU does logits/sampling below
-      asyncEval(yPred, cache)
+      if let c = cache { asyncEval(yPred, c) } else { asyncEval(yPred) }
 
       // Get logits for last position (forces eval of yPred)
       let logits = llmDecoder(yPred[0..., yPred.shape[1] - 1, 0...])
@@ -490,7 +490,7 @@ class CosyVoice3LM: Module {
       cache = newCache
 
       // Pipeline: start async eval immediately after forward
-      asyncEval(yPred, cache)
+      if let c = cache { asyncEval(yPred, c) } else { asyncEval(yPred) }
 
       // Get logits for last position (forces eval of yPred)
       let logits = llmDecoder(yPred[0..., yPred.shape[1] - 1, 0...])

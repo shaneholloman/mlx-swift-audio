@@ -392,7 +392,7 @@ class Qwen2LM: Module {
       cache = newCache
 
       // Pipeline: start async eval immediately after forward
-      asyncEval(yPred, cache)
+      if let c = cache { asyncEval(yPred, c) } else { asyncEval(yPred) }
 
       // Get logits for last position (forces eval of yPred)
       let logits = llmDecoder(yPred[0..., yPred.shape[1] - 1, 0...])
