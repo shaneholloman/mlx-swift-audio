@@ -57,10 +57,7 @@ struct InputSection: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(
-              RoundedRectangle(cornerRadius: 8)
-                .fill(Color.green.opacity(0.1))
-            )
+            .glassEffect(.regular.tint(Color.green.opacity(0.1)), in: .rect(cornerRadius: 8))
           }
       }
 
@@ -80,7 +77,7 @@ struct InputSection: View {
           Text(appState.selectedTask.rawValue)
         }
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.glassProminent)
       .disabled(!appState.canTranscribe)
 
       // Model loading progress

@@ -16,6 +16,8 @@ extension TTSProvider {
         "TTS with speaker profiles"
       case .chatterbox:
         "TTS with reference audio support"
+      case .chatterboxTurbo:
+        "Fast TTS with reference audio support"
       case .cosyVoice2:
         "Voice matching with instruct mode and voice conversion"
       case .cosyVoice3:
@@ -36,6 +38,8 @@ extension TTSProvider {
         "OuteTTS: Supports custom speaker profiles."
       case .chatterbox:
         "Chatterbox: TTS with reference audio support."
+      case .chatterboxTurbo:
+        "Chatterbox Turbo: Fast TTS with reference audio support."
       case .cosyVoice2:
         "CosyVoice 2: Voice matching with instruct mode and voice conversion."
       case .cosyVoice3:

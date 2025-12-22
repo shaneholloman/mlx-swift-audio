@@ -23,6 +23,7 @@ struct RegularLayoutView: View {
           }
           .padding()
         }
+        .scrollDismissesKeyboard(.interactively)
       }
       .navigationTitle("TTS App")
       #if os(iOS)

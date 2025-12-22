@@ -24,6 +24,7 @@ struct InputSection: View {
         isGenerating: appState.isGenerating,
         canGenerate: !appState.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
         onGenerate: {
+          dismissKeyboard()
           Task {
             if !appState.isLoaded {
               try? await appState.loadEngine()
@@ -39,6 +40,7 @@ struct InputSection: View {
       // Streaming option
       VStack {
         Button {
+          dismissKeyboard()
           Task {
             if !appState.isLoaded {
               try? await appState.loadEngine()
@@ -52,7 +54,7 @@ struct InputSection: View {
           }
           .padding(.vertical, 4)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.glass)
         .disabled(appState.isModelLoading || appState.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         Text(appState.streamingGranularity.shortDescription)
@@ -60,5 +62,11 @@ struct InputSection: View {
           .foregroundStyle(.secondary)
       }
     }
+  }
+
+  private func dismissKeyboard() {
+    #if os(iOS)
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    #endif
   }
 }

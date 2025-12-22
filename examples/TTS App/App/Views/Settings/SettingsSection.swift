@@ -82,6 +82,27 @@ struct SettingsSection: View {
         }
       }
 
+      // Reference Audio (Chatterbox Turbo)
+      if appState.selectedProvider == .chatterboxTurbo {
+        ReferenceAudioPicker(
+          config: ReferenceAudioPickerConfig(
+            title: "Reference Audio",
+            infoText: "Chatterbox Turbo uses reference audio to match voice characteristics. A faster variant optimized for speed."
+          ),
+          statusDescription: appState.chatterboxTurboReferenceAudioDescription,
+          isLoaded: appState.isChatterboxTurboReferenceAudioLoaded,
+          onLoadDefault: {
+            try await appState.prepareDefaultChatterboxTurboReferenceAudio()
+          },
+          onLoadFromFile: { url in
+            try await appState.prepareChatterboxTurboReferenceAudio(from: url)
+          },
+          onLoadFromURL: { url in
+            try await appState.prepareChatterboxTurboReferenceAudio(from: url)
+          }
+        )
+      }
+
       // Speaker (CosyVoice2)
       if appState.selectedProvider == .cosyVoice2 {
         ReferenceAudioPicker(
@@ -147,6 +168,7 @@ private struct QualityLevelSection: View {
   var body: some View {
     @Bindable var appState = appState
     HStack {
+      Text("Quality")
       Picker("Quality", selection: $appState.marvisQualityLevel) {
         ForEach(MarvisEngine.QualityLevel.allCases, id: \.self) { level in
           Text("\(level.rawValue.capitalized) (\(level.codebookCount) codebooks)")
@@ -154,6 +176,7 @@ private struct QualityLevelSection: View {
         }
       }
       .pickerStyle(.menu)
+      .buttonStyle(.glass)
     }
   }
 }
@@ -166,15 +189,14 @@ private struct CosyVoice2ModeSection: View {
     @Bindable var appState = appState
     VStack(alignment: .leading, spacing: 12) {
       // Mode picker
-      HStack {
-        Picker("Mode", selection: $appState.cosyVoice2GenerationMode) {
-          ForEach(CosyVoice2Engine.GenerationMode.allCases, id: \.self) { mode in
-            Text(mode.rawValue)
-              .tag(mode)
-          }
+      Picker("Mode", selection: $appState.cosyVoice2GenerationMode) {
+        ForEach(CosyVoice2Engine.GenerationMode.allCases, id: \.self) { mode in
+          Text(mode.rawValue)
+            .tag(mode)
         }
-        .pickerStyle(.menu)
       }
+      .pickerStyle(.menu)
+      .buttonStyle(.glass)
 
       // Mode description
       Text(appState.cosyVoice2GenerationMode.description)
@@ -272,7 +294,7 @@ private struct CosyVoice2SourceAudioSection: View {
         Button("Choose File") {
           showFilePicker = true
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.glass)
         .disabled(isLoading)
       }
 
@@ -326,15 +348,14 @@ private struct CosyVoice3ModeSection: View {
     @Bindable var appState = appState
     VStack(alignment: .leading, spacing: 12) {
       // Mode picker
-      HStack {
-        Picker("Mode", selection: $appState.cosyVoice3GenerationMode) {
-          ForEach(CosyVoice3Engine.GenerationMode.allCases, id: \.self) { mode in
-            Text(mode.rawValue)
-              .tag(mode)
-          }
+      Picker("Mode", selection: $appState.cosyVoice3GenerationMode) {
+        ForEach(CosyVoice3Engine.GenerationMode.allCases, id: \.self) { mode in
+          Text(mode.rawValue)
+            .tag(mode)
         }
-        .pickerStyle(.menu)
       }
+      .pickerStyle(.menu)
+      .buttonStyle(.glass)
 
       // Mode description
       Text(appState.cosyVoice3GenerationMode.description)
@@ -432,7 +453,7 @@ private struct CosyVoice3SourceAudioSection: View {
         Button("Choose File") {
           showFilePicker = true
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.glass)
         .disabled(isLoading)
       }
 

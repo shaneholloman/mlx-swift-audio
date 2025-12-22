@@ -33,10 +33,7 @@ struct FileImportButton: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(
-          RoundedRectangle(cornerRadius: 12)
-            .fill(Color.secondary.opacity(0.1))
-        )
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
       }
       .buttonStyle(.plain)
       .fileImporter(
@@ -73,10 +70,7 @@ struct FileImportButton: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(
-          RoundedRectangle(cornerRadius: 8)
-            .fill(Color.blue.opacity(0.1))
-        )
+        .glassEffect(.regular.tint(Color.blue.opacity(0.1)), in: .rect(cornerRadius: 8))
       }
     }
   }

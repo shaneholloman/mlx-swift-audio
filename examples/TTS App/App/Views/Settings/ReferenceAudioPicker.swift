@@ -64,7 +64,7 @@ struct ReferenceAudioPicker: View {
         Spacer()
       }
       .padding(8)
-      .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+      .glassEffect(.regular.tint(tintColor), in: .rect(cornerRadius: 8))
 
       // Action buttons
       HStack(spacing: 12) {
@@ -73,7 +73,7 @@ struct ReferenceAudioPicker: View {
         } label: {
           Label("Default", systemImage: "waveform")
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.glass)
         .disabled(isLoading)
 
         Button {
@@ -81,7 +81,7 @@ struct ReferenceAudioPicker: View {
         } label: {
           Label("File", systemImage: "folder")
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.glass)
         .disabled(isLoading)
 
         Button {
@@ -89,7 +89,7 @@ struct ReferenceAudioPicker: View {
         } label: {
           Label("URL", systemImage: "link")
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.glass)
         .disabled(isLoading)
       }
 
@@ -144,6 +144,16 @@ struct ReferenceAudioPicker: View {
       .green
     } else {
       .secondary
+    }
+  }
+
+  private var tintColor: Color {
+    if isLoading {
+      Color.orange.opacity(0.1)
+    } else if isLoaded {
+      Color.green.opacity(0.1)
+    } else {
+      Color.secondary.opacity(0.1)
     }
   }
 

@@ -3,12 +3,14 @@
 **This package is in early development. Expect breaking changes.**
 
 - Text to speech
-  - [CosyVoice2](https://github.com/FunAudioLLM/CosyVoice)
   - [Chatterbox](https://github.com/resemble-ai/chatterbox)
-  - [OuteTTS](https://github.com/edwko/OuteTTS)
+  - [Chatterbox Turbo](https://github.com/resemble-ai/chatterbox)
+  - [CosyVoice 2](https://github.com/FunAudioLLM/CosyVoice)
+  - [CosyVoice 3](https://github.com/FunAudioLLM/CosyVoice)
   - [Kokoro](https://github.com/hexgrad/kokoro)
-  - [Orpheus](https://github.com/canopyai/Orpheus-TTS)
   - [Marvis](https://github.com/Marvis-Labs/marvis-tts)
+  - [Orpheus](https://github.com/canopyai/Orpheus-TTS)
+  - [OuteTTS](https://github.com/edwko/OuteTTS)
 
 - Speech to text
   - [Whisper](https://github.com/openai/whisper)

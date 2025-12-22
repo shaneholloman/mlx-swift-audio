@@ -127,7 +127,7 @@ actor FunASRSTT {
       cache: cache
     )
     cache = newCache
-    asyncEval(logits, cache)
+    if let c = cache { asyncEval(logits, c) } else { asyncEval(logits) }
 
     for _ in 0 ..< actualMaxTokens {
       // Sample current token
@@ -142,7 +142,7 @@ actor FunASRSTT {
         cache: cache
       )
       cache = newCache
-      asyncEval(logits, cache)
+      if let c = cache { asyncEval(logits, c) } else { asyncEval(logits) }
 
       // NOW extract token ID - GPU is already computing next step
       let tokenId = token.item(Int.self)
@@ -239,7 +239,7 @@ actor FunASRSTT {
             cache: cache
           )
           cache = newCache
-          asyncEval(logits, cache)
+          if let c = cache { asyncEval(logits, c) } else { asyncEval(logits) }
 
           for _ in 0 ..< actualMaxTokens {
             try Task.checkCancellation()
@@ -256,7 +256,7 @@ actor FunASRSTT {
               cache: cache
             )
             cache = newCache
-            asyncEval(logits, cache)
+            if let c = cache { asyncEval(logits, c) } else { asyncEval(logits) }
 
             // NOW extract token ID - GPU is already computing next step
             let tokenId = token.item(Int.self)

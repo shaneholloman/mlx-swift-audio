@@ -42,11 +42,11 @@ public struct ChatterboxReferenceAudio: Sendable {
   }
 }
 
-/// Default reference audio URL - LibriVox public domain reading
-/// "The Dead Boche" by Robert Graves, ~38 seconds (public domain)
+/// Default reference audio URL - LJ Speech Dataset sample
+/// ~7 seconds (public domain)
 public let defaultReferenceAudioURL = URL(
   string:
-  "https://archive.org/download/short_poetry_001_librivox/dead_boche_graves_sm.mp3",
+  "https://keithito.com/LJ-Speech-Dataset/LJ037-0171.wav",
 )!
 
 /// Chatterbox TTS engine - TTS with reference audio

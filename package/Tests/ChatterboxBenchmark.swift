@@ -37,7 +37,7 @@ struct ChatterboxBenchmark {
 
   /// Default reference audio URL
   static let defaultReferenceAudioURL = URL(
-    string: "https://archive.org/download/short_poetry_001_librivox/dead_boche_graves_sm.mp3",
+    string: "https://keithito.com/LJ-Speech-Dataset/LJ037-0171.wav",
   )!
 
   // MARK: - Detailed Pipeline Benchmark

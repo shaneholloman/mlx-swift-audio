@@ -8,24 +8,15 @@ struct ProviderPickerView: View {
   let onSelect: (TTSProvider) -> Void
 
   var body: some View {
-    Menu {
+    Picker("Provider", selection: Binding(
+      get: { selectedProvider },
+      set: { onSelect($0) }
+    )) {
       ForEach(TTSProvider.allCases) { provider in
-        Button {
-          onSelect(provider)
-        } label: {
-          HStack {
-            Text(provider.displayName)
-            if provider == selectedProvider {
-              Image(systemName: "checkmark")
-            }
-          }
-        }
-      }
-    } label: {
-      HStack(spacing: 4) {
-        Image(systemName: "waveform")
-        Text(selectedProvider.displayName)
+        Text(provider.displayName).tag(provider)
       }
     }
+    .pickerStyle(.menu)
+    .buttonStyle(.glass)
   }
 }

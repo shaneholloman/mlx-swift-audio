@@ -50,13 +50,9 @@ struct RecordButton: View {
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding()
-      .background(
-        RoundedRectangle(cornerRadius: 12)
-          .fill(isRecording ? Color.red.opacity(0.1) : Color.secondary.opacity(0.1))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 12)
-          .stroke(isRecording ? Color.red.opacity(0.3) : Color.clear, lineWidth: 1)
+      .glassEffect(
+        isRecording ? .regular.tint(.red).interactive() : .regular.interactive(),
+        in: .rect(cornerRadius: 12)
       )
     }
     .buttonStyle(.plain)

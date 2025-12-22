@@ -17,6 +17,7 @@ struct CompactLayoutView: View {
         }
         .padding()
       }
+      .scrollDismissesKeyboard(.interactively)
       .navigationTitle("TTS App")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -51,10 +52,9 @@ private struct ProviderAndVoiceSection: View {
         },
       )
 
-      Spacer()
-
       VoicePickerView()
     }
+    .frame(maxWidth: .infinity)
   }
 }
 

@@ -50,12 +50,7 @@ struct TextInputView: View {
       }
       .frame(minHeight: 120, maxHeight: 300)
       .padding(8)
-      .background(.background.secondary)
-      .clipShape(RoundedRectangle(cornerRadius: 8))
-      .overlay(
-        RoundedRectangle(cornerRadius: 8)
-          .stroke(.separator, lineWidth: 1),
-      )
+      .glassEffect(.regular, in: .rect(cornerRadius: 8))
     }
   }
 }

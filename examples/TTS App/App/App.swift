@@ -1,6 +1,9 @@
 // Copyright © Anthony DePasquale
 
 import SwiftUI
+#if os(iOS)
+import MLXAudio
+#endif
 
 @main
 struct MLXAudioApp: App {

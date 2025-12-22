@@ -33,7 +33,7 @@ struct GenerateButton: View {
       }
       .padding(.vertical, 4)
     }
-    .buttonStyle(.borderedProminent)
+    .buttonStyle(.glassProminent)
     .disabled(isLoading || (!isGenerating && !canGenerate))
   }
 }

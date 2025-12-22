@@ -62,11 +62,11 @@ public struct CosyVoice2Speaker: Sendable {
   }
 }
 
-/// Default reference audio URL - LibriVox public domain reading
-/// "The Dead Boche" by Robert Graves, ~38 seconds (public domain)
+/// Default reference audio URL - LJ Speech Dataset sample
+/// ~7 seconds (public domain)
 public let cosyVoice2DefaultReferenceAudioURL = URL(
   string:
-  "https://archive.org/download/short_poetry_001_librivox/dead_boche_graves_sm.mp3"
+  "https://keithito.com/LJ-Speech-Dataset/LJ037-0171.wav"
 )!
 
 // MARK: - CosyVoice2 Engine
@@ -224,7 +224,7 @@ public final class CosyVoice2Engine: TTSEngine {
 
     Log.model.info("Loading Whisper for transcription...")
     let whisper = try await WhisperSTT.load(
-      modelSize: .largeTurbo,
+      modelSize: .base,
       quantization: .q4
     )
     whisperSTT = whisper

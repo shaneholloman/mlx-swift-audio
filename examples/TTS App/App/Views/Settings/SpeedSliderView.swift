@@ -42,26 +42,46 @@ struct SpeedSliderView: View {
       // Quick presets
       HStack(spacing: 8) {
         ForEach([0.5, 1.0, 1.5, 2.0], id: \.self) { preset in
-          Button {
+          SpeedPresetButton(
+            preset: preset,
+            isSelected: speed == Float(preset),
+            isDisabled: isDisabled
+          ) {
             withAnimation(.easeInOut(duration: 0.2)) {
               speed = Float(preset)
             }
-          } label: {
-            Text("\(preset.formatted(decimals: 1))x")
-              .font(.caption)
-              .padding(.horizontal, 8)
-              .padding(.vertical, 4)
-              .background(
-                speed == Float(preset)
-                  ? Color.accentColor.opacity(0.2)
-                  : Color.clear,
-              )
-              .clipShape(RoundedRectangle(cornerRadius: 4))
           }
-          .buttonStyle(.plain)
-          .disabled(isDisabled)
         }
       }
+    }
+  }
+}
+
+private struct SpeedPresetButton: View {
+  let preset: Double
+  let isSelected: Bool
+  let isDisabled: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      Text("\(preset.formatted(decimals: 1))x")
+        .font(.caption)
+    }
+    .modifier(PresetButtonStyle(isSelected: isSelected))
+    .disabled(isDisabled)
+  }
+}
+
+private struct PresetButtonStyle: ViewModifier {
+  let isSelected: Bool
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if isSelected {
+      content.buttonStyle(.glassProminent)
+    } else {
+      content.buttonStyle(.glass)
     }
   }
 }

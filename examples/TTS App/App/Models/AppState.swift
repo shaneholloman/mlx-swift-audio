@@ -244,6 +244,56 @@ extension AppState {
   }
 }
 
+// MARK: - Chatterbox Turbo Reference Audio
+
+extension AppState {
+  /// Current prepared reference audio for Chatterbox Turbo
+  var chatterboxTurboReferenceAudio: ChatterboxTurboReferenceAudio? {
+    get { engineManager.chatterboxTurboReferenceAudio }
+    set { engineManager.chatterboxTurboReferenceAudio = newValue }
+  }
+
+  /// Whether reference audio is prepared for Chatterbox Turbo
+  var isChatterboxTurboReferenceAudioLoaded: Bool {
+    engineManager.chatterboxTurboReferenceAudio != nil
+  }
+
+  /// Description of current reference audio
+  var chatterboxTurboReferenceAudioDescription: String {
+    engineManager.chatterboxTurboReferenceAudio?.description ?? "No reference audio"
+  }
+
+  /// Prepare reference audio from a URL (local file or remote)
+  func prepareChatterboxTurboReferenceAudio(from url: URL) async throws {
+    let ref = try await engineManager.chatterboxTurboEngine.prepareReferenceAudio(from: url)
+    engineManager.chatterboxTurboReferenceAudio = ref
+  }
+
+  /// Prepare the default reference audio
+  func prepareDefaultChatterboxTurboReferenceAudio() async throws {
+    let ref = try await engineManager.chatterboxTurboEngine.prepareDefaultReferenceAudio()
+    engineManager.chatterboxTurboReferenceAudio = ref
+  }
+
+  /// Temperature for Chatterbox Turbo
+  var chatterboxTurboTemperature: Float {
+    get { engineManager.chatterboxTurboEngine.temperature }
+    set { engineManager.chatterboxTurboEngine.temperature = newValue }
+  }
+
+  /// Top-P for Chatterbox Turbo
+  var chatterboxTurboTopP: Float {
+    get { engineManager.chatterboxTurboEngine.topP }
+    set { engineManager.chatterboxTurboEngine.topP = newValue }
+  }
+
+  /// Top-K for Chatterbox Turbo
+  var chatterboxTurboTopK: Int {
+    get { engineManager.chatterboxTurboEngine.topK }
+    set { engineManager.chatterboxTurboEngine.topK = newValue }
+  }
+}
+
 // MARK: - CosyVoice2 Speaker
 
 extension AppState {
