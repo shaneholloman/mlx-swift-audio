@@ -269,9 +269,11 @@ actor CosyVoice3TTS {
     )
 
     // Create PreLookaheadLayer
+    // Note: channels should be dit.dim (1024), matching Python's build_flow_model
+    // which uses: PreLookaheadLayer(input_size, dit_dim, pre_lookahead_len)
     let preLookahead = CosyVoice3PreLookaheadLayer(
       inChannels: config.flow.inputSize,
-      channels: config.flow.preLookaheadChannels,
+      channels: config.flow.dit.dim,
       preLookaheadLen: config.flow.preLookaheadLen
     )
 
