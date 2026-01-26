@@ -251,4 +251,21 @@ struct ChatterboxTurboTests {
 
     print("\nMultiple generations test passed!")
   }
+
+  /// Test q8 model loading
+  @Test @MainActor func testQ8ModelLoading() async throws {
+    print("=== ChatterboxTurbo Q8 Model Loading Test ===\n")
+
+    let loadStart = CFAbsoluteTimeGetCurrent()
+    let model = try await ChatterboxTurboModel.load(quantization: .q8)
+    let loadTime = CFAbsoluteTimeGetCurrent() - loadStart
+
+    print("Q8 model loaded in \(String(format: "%.2f", loadTime))s")
+
+    // Verify components
+    #expect(model.textTokenizer != nil, "Text tokenizer should be loaded")
+    #expect(model.s3Tokenizer != nil, "S3 tokenizer should be loaded")
+
+    print("\nChatterboxTurbo q8 model loading test passed!")
+  }
 }

@@ -9,30 +9,53 @@ import Hub
 import MLX
 import MLXNN
 
+/// Quantization configuration from Orpheus config.json
+struct OrpheusQuantizationConfig: Codable, Sendable {
+  var bits: Int
+  var groupSize: Int
+
+  enum CodingKeys: String, CodingKey {
+    case bits
+    case groupSize = "group_size"
+  }
+}
+
+/// Partial config struct to extract just the quantization section
+private struct OrpheusPartialConfig: Codable {
+  var quantization: OrpheusQuantizationConfig?
+}
+
 class OrpheusWeightLoader {
   private init() {}
 
   static let defaultRepoId = "mlx-community/orpheus-3b-0.1-ft-4bit"
   static let defaultWeightsFilename = "model.safetensors"
 
-  static func loadWeights(
+  /// Load weights and quantization config in a single snapshot call
+  static func load(
     repoId: String = defaultRepoId,
     filename: String = defaultWeightsFilename,
-    progressHandler: @escaping (Progress) -> Void = { _ in },
-  ) async throws -> [String: MLXArray] {
+    progressHandler: @escaping (Progress) -> Void = { _ in }
+  ) async throws -> (weights: [String: MLXArray], quantization: OrpheusQuantizationConfig?) {
     let modelDirectoryURL = try await HubConfiguration.shared.snapshot(
       from: repoId,
-      matching: [filename],
+      matching: [filename, "config.json"],
       progressHandler: progressHandler
     )
-    let weightFileURL = modelDirectoryURL.appending(path: filename)
-    return try loadWeights(from: weightFileURL)
-  }
 
-  static func loadWeights(from url: URL) throws -> [String: MLXArray] {
-    // Load weights directly without dequantization
-    // Quantized models have .weight (uint32 packed), .scales, and .biases
-    // These will be loaded into QuantizedLinear layers by the Module system
-    try MLX.loadArrays(url: url)
+    // Load weights
+    let weightFileURL = modelDirectoryURL.appending(path: filename)
+    let weights = try MLX.loadArrays(url: weightFileURL)
+
+    // Load quantization config
+    let configURL = modelDirectoryURL.appending(path: "config.json")
+    var quantization: OrpheusQuantizationConfig?
+    if let data = try? Data(contentsOf: configURL),
+       let config = try? JSONDecoder().decode(OrpheusPartialConfig.self, from: data)
+    {
+      quantization = config.quantization
+    }
+
+    return (weights, quantization)
   }
 }

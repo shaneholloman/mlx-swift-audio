@@ -186,6 +186,15 @@ public enum WhisperQuantization: String, Sendable, CaseIterable {
       case .q4: 0.25
     }
   }
+
+  /// Quantization bit width, or nil for fp16 (no quantization)
+  public var bits: Int? {
+    switch self {
+      case .q8: 8
+      case .q4: 4
+      case .fp16: nil
+    }
+  }
 }
 
 // MARK: - WhisperModelSize

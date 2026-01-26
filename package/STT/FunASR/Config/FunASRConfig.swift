@@ -30,6 +30,15 @@ public enum FunASRQuantization: String, CaseIterable, Sendable {
   public var isQuantized: Bool {
     self != .fp16
   }
+
+  /// Quantization bit width, or nil for fp16 (no quantization)
+  public var bits: Int? {
+    switch self {
+      case .q8: 8
+      case .q4: 4
+      case .fp16: nil
+    }
+  }
 }
 
 /// Combined model variant specification

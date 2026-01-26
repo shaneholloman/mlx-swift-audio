@@ -384,15 +384,12 @@ class ChatterboxModel: Module {
     // Initialize model
     let model = ChatterboxModel()
 
-    // Check if model is quantized (has .scales weights)
+    // Apply quantization if weights are quantized and quantization level specifies bits
     let isQuantized = weights.keys.contains { $0.contains(".scales") }
-    if isQuantized {
-      Log.model.info("Detected quantized Chatterbox model weights")
+    if isQuantized, let bits = quantization.bits {
+      Log.model.info("Detected quantized Chatterbox model weights (\(bits)-bit)")
       quantize(model: model) { path, _ in
-        if weights["\(path).scales"] != nil {
-          return (64, 4, .affine)
-        }
-        return nil
+        weights["\(path).scales"] != nil ? (64, bits, .affine) : nil
       }
     }
 

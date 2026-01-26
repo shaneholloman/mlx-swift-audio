@@ -56,6 +56,15 @@ public enum ChatterboxTurboQuantization: String, Sendable, CaseIterable {
       case .q4: 0.25
     }
   }
+
+  /// Quantization bit width, or nil for fp16 (no quantization)
+  public var bits: Int? {
+    switch self {
+      case .q8: 8
+      case .q4: 4
+      case .fp16: nil
+    }
+  }
 }
 
 // MARK: - Conditionals for Turbo
@@ -234,15 +243,12 @@ class ChatterboxTurboModel: Module {
     // Initialize model
     let model = ChatterboxTurboModel()
 
-    // Check for quantized weights and apply quantization to matching layers
+    // Apply quantization if weights are quantized and quantization level specifies bits
     let isQuantized = weights.keys.contains { $0.contains(".scales") }
-    if isQuantized {
-      Log.model.info("Detected quantized ChatterboxTurbo weights")
+    if isQuantized, let bits = quantization.bits {
+      Log.model.info("Detected quantized ChatterboxTurbo weights (\(bits)-bit)")
       quantize(model: model) { path, _ in
-        if weights["\(path).scales"] != nil {
-          return (64, 4, .affine)
-        }
-        return nil
+        weights["\(path).scales"] != nil ? (64, bits, .affine) : nil
       }
     }
 

@@ -185,7 +185,7 @@ actor OuteTTS {
         case quantization
       }
 
-      struct QuantizationConfig: Codable {
+      struct QuantizationConfig: Codable, Sendable {
         let groupSize: Int
         let bits: Int
 
@@ -232,14 +232,9 @@ actor OuteTTS {
     // Apply sanitize (removes rotary embeddings)
     remappedWeights = model.sanitize(weights: remappedWeights)
 
-    // Apply quantization if needed
+    // Apply quantization if config specifies it
     if let quant = baseConfig.quantization {
       quantize(model: model, groupSize: quant.groupSize, bits: quant.bits) { path, _ in
-        remappedWeights["\(path).scales"] != nil
-      }
-    } else if remappedWeights.keys.contains(where: { $0.contains(".scales") }) {
-      // Fallback: weights have .scales but no quantization config
-      quantize(model: model, groupSize: 64, bits: 4) { path, _ in
         remappedWeights["\(path).scales"] != nil
       }
     }

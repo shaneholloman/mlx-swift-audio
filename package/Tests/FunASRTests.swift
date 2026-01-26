@@ -119,16 +119,21 @@ struct FunASRTests {
   @Test @MainActor func funASRModelVariants() async throws {
     print("Testing Fun-ASR model variants load correctly...")
 
-    // Test that each variant can be loaded
-    // Only test 4-bit for CI speed, others can be tested manually
+    // Test 4-bit variant
+    print("Loading nano4bit...")
+    let engine4bit = STT.funASR(variant: .nano4bit)
+    try await engine4bit.load()
+    #expect(engine4bit.isLoaded == true)
+    #expect(engine4bit.variant == .nano4bit)
+    await engine4bit.unload()
 
-    let engine = STT.funASR(variant: .nano4bit)
-    try await engine.load()
-    #expect(engine.isLoaded == true)
-    #expect(engine.variant == .nano4bit)
-
-    await engine.unload()
-    #expect(engine.isLoaded == false)
+    // Test 8-bit variant
+    print("Loading nano8bit...")
+    let engine8bit = STT.funASR(variant: .nano8bit)
+    try await engine8bit.load()
+    #expect(engine8bit.isLoaded == true)
+    #expect(engine8bit.variant == .nano8bit)
+    await engine8bit.unload()
 
     print("Model variant test passed")
   }

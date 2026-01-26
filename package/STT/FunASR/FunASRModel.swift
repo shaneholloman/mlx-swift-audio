@@ -291,15 +291,12 @@ class FunASRModel: Module {
     // Sanitize weights (handle conv transposition)
     let sanitizedWeights = sanitize(allWeights)
 
-    // Check if model is quantized
+    // Apply quantization if weights are quantized and quantization level specifies bits
     let isQuantized = sanitizedWeights.keys.contains { $0.contains(".scales") }
-    if isQuantized {
-      Log.model.info("Detected quantized Fun-ASR model weights")
+    if isQuantized, let bits = variant.quantization.bits {
+      Log.model.info("Detected quantized Fun-ASR model weights (\(bits)-bit)")
       quantize(model: model) { path, _ in
-        if sanitizedWeights["\(path).scales"] != nil {
-          return (64, 4, .affine)
-        }
-        return nil
+        sanitizedWeights["\(path).scales"] != nil ? (64, bits, .affine) : nil
       }
     }
 

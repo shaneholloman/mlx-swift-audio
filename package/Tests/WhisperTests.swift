@@ -65,11 +65,13 @@ struct WhisperTests {
     // Tiny models - fastest
     try await testVariant(.tiny, .fp16, minAccuracy: 1.0)
     try await testVariant(.tiny, .q4, minAccuracy: 1.0)
+    try await testVariant(.tiny, .q8, minAccuracy: 1.0)
     try await testVariant(.tinyEn, .fp16, minAccuracy: 1.0)
 
     // Base models - good balance of speed and quality
     try await testVariant(.base, .fp16, minAccuracy: 1.0)
     try await testVariant(.base, .q4, minAccuracy: 1.0)
+    try await testVariant(.base, .q8, minAccuracy: 1.0)
     try await testVariant(.baseEn, .fp16, minAccuracy: 1.0)
 
     // Small model - mid-size
@@ -77,6 +79,7 @@ struct WhisperTests {
 
     // Large turbo - best quality
     try await testVariant(.largeTurbo, .q4, minAccuracy: 1.0)
+    try await testVariant(.largeTurbo, .q8, minAccuracy: 1.0)
   }
 
   @Test @MainActor func whisperAudioPreprocessing() async throws {
@@ -124,10 +127,15 @@ struct WhisperTests {
     print("  Duration: \(String(format: "%.2f", result.duration))s")
     print("  Processing time: \(String(format: "%.2f", result.processingTime))s")
 
-    // Model may output words ("one two three...") or digits ("1 2 3...")
+    // Model may output words ("one two three...") or digits ("1, 2, 3..." or "1 2 3...")
     let expectedWords = Set(["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"])
     let expectedDigits = Set(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"])
-    let resultTokens = Set(result.text.lowercased().split(separator: " ").map(String.init))
+
+    // Strip punctuation before tokenizing
+    let punctuation = CharacterSet.punctuationCharacters
+    let cleanedText = result.text.lowercased().components(separatedBy: punctuation).joined()
+    let resultTokens = Set(cleanedText.split(separator: " ").map(String.init))
+
     let matchedWords = resultTokens.intersection(expectedWords)
     let matchedDigits = resultTokens.intersection(expectedDigits)
     let totalMatched = max(matchedWords.count, matchedDigits.count)

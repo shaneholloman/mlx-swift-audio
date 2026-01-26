@@ -8,6 +8,17 @@
 
 import Foundation
 
+/// Quantization configuration from config.json
+struct CosyVoice3QuantizationConfig: Codable, Sendable {
+  var bits: Int
+  var groupSize: Int
+
+  enum CodingKeys: String, CodingKey {
+    case bits
+    case groupSize = "group_size"
+  }
+}
+
 /// Configuration for DiT (Diffusion Transformer) module
 public struct DiTConfig: Codable, Sendable {
   public var dim: Int = 1024
@@ -306,6 +317,9 @@ public struct CosyVoice3Config: Codable, Sendable {
   public var flow: CosyVoice3FlowConfig = .init()
   public var hifigan: CosyVoice3HiFiGANConfig = .init()
 
+  // Quantization (optional, only present in quantized models)
+  var quantization: CosyVoice3QuantizationConfig?
+
   // Model paths
   public var llmPath: String?
   public var flowPath: String?
@@ -320,6 +334,7 @@ public struct CosyVoice3Config: Codable, Sendable {
     case llm
     case flow
     case hifigan
+    case quantization
     case llmPath = "llm_path"
     case flowPath = "flow_path"
     case hifiganPath = "hifigan_path"
@@ -370,6 +385,12 @@ public struct CosyVoice3Config: Codable, Sendable {
     if let hifiganDict = json["hifigan"] as? [String: Any] ?? json["hift"] as? [String: Any] {
       let hifiganData = try JSONSerialization.data(withJSONObject: hifiganDict)
       config.hifigan = try JSONDecoder().decode(CosyVoice3HiFiGANConfig.self, from: hifiganData)
+    }
+
+    // Parse quantization config (optional, only present in quantized models)
+    if let quantDict = json["quantization"] as? [String: Any] {
+      let quantData = try JSONSerialization.data(withJSONObject: quantDict)
+      config.quantization = try JSONDecoder().decode(CosyVoice3QuantizationConfig.self, from: quantData)
     }
 
     return config

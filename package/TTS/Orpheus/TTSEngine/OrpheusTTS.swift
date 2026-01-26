@@ -104,9 +104,9 @@ actor OrpheusTTS {
     snacRepoId: String = SNACDecoder.defaultRepoId,
     progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
   ) async throws -> OrpheusTTS {
-    // Load model weights from Hub
-    let loadedWeights = try await Profiler.timeAsync("Weight loading") {
-      try await OrpheusWeightLoader.loadWeights(repoId: repoId, progressHandler: progressHandler)
+    // Load model weights and quantization config from Hub (single snapshot call)
+    let (loadedWeights, quantConfig) = try await Profiler.timeAsync("Weight and config loading") {
+      try await OrpheusWeightLoader.load(repoId: repoId, progressHandler: progressHandler)
     }
 
     // Load SNAC decoder weights and config
@@ -148,19 +148,12 @@ actor OrpheusTTS {
       OrpheusLMHeadModel()
     }
 
-    // Check if model is quantized (has .scales weights)
-    let isQuantized = loadedWeights.keys.contains { $0.contains(".scales") }
-    if isQuantized {
-      Log.model.info("Detected quantized model weights")
-      // Apply quantization to convert Linear/Embedding -> Quantized versions where needed
+    // Apply quantization if config specifies it and weights have .scales
+    if let quant = quantConfig {
+      Log.model.info("Detected quantized model weights (\(quant.bits)-bit)")
       Profiler.time("Apply quantization") {
         quantize(model: model) { path, _ in
-          // Quantize any layer that has corresponding .scales in weights
-          if loadedWeights["\(path).scales"] != nil {
-            // Return (groupSize, bits, mode) - 64 group size, 4-bit quantization, affine mode
-            return (64, 4, .affine)
-          }
-          return nil
+          loadedWeights["\(path).scales"] != nil ? (quant.groupSize, quant.bits, .affine) : nil
         }
       }
     }

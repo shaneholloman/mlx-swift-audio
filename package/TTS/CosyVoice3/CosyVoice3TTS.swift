@@ -164,12 +164,11 @@ actor CosyVoice3TTS {
         result[String(pair.key.dropFirst("llm.".count))] = pair.value
       }
 
-    // Quantize LLM if weights are quantized
-    quantize(model: llm) { path, _ in
-      if llmWeights["\(path).scales"] != nil {
-        return (groupSize: 64, bits: 4, mode: .affine)
+    // Quantize LLM if config specifies quantization and weights have .scales
+    if let quant = config.quantization {
+      quantize(model: llm) { path, _ in
+        llmWeights["\(path).scales"] != nil ? (quant.groupSize, quant.bits, .affine) : nil
       }
-      return nil
     }
 
     if !llmWeights.isEmpty {
@@ -183,12 +182,11 @@ actor CosyVoice3TTS {
         result[String(pair.key.dropFirst("qwen2.".count))] = pair.value
       }
 
-    // Quantize Qwen2 model if weights are quantized
-    quantize(model: llm.llm) { path, _ in
-      if qwen2Weights["\(path).scales"] != nil {
-        return (groupSize: 64, bits: 4, mode: .affine)
+    // Quantize Qwen2 model if config specifies quantization and weights have .scales
+    if let quant = config.quantization {
+      quantize(model: llm.llm) { path, _ in
+        qwen2Weights["\(path).scales"] != nil ? (quant.groupSize, quant.bits, .affine) : nil
       }
-      return nil
     }
 
     if !qwen2Weights.isEmpty {
@@ -230,12 +228,11 @@ actor CosyVoice3TTS {
         result[key] = pair.value
       }
 
-    // Quantize HiFi-GAN if weights are quantized
-    quantize(model: hifigan) { path, _ in
-      if hifiganWeights["\(path).scales"] != nil {
-        return (groupSize: 64, bits: 4, mode: .affine)
+    // Quantize HiFi-GAN if config specifies quantization and weights have .scales
+    if let quant = config.quantization {
+      quantize(model: hifigan) { path, _ in
+        hifiganWeights["\(path).scales"] != nil ? (quant.groupSize, quant.bits, .affine) : nil
       }
-      return nil
     }
 
     if !hifiganWeights.isEmpty {
@@ -302,12 +299,11 @@ actor CosyVoice3TTS {
         }
       }
 
-    // Quantize flow model if weights are quantized
-    quantize(model: flow) { path, _ in
-      if flowWeights["\(path).scales"] != nil {
-        return (groupSize: 64, bits: 4, mode: .affine)
+    // Quantize flow model if config specifies quantization and weights have .scales
+    if let quant = config.quantization {
+      quantize(model: flow) { path, _ in
+        flowWeights["\(path).scales"] != nil ? (quant.groupSize, quant.bits, .affine) : nil
       }
-      return nil
     }
 
     if !flowWeights.isEmpty {

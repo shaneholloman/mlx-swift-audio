@@ -106,4 +106,12 @@ struct ChatterboxTests {
 
     print("ChatterboxModel direct load test passed!")
   }
+
+  @Test @MainActor func chatterboxQ8Loads() async throws {
+    print("Testing Chatterbox q8 model loading...")
+    let engine = ChatterboxEngine(quantization: .q8)
+    try await engine.load()
+    #expect(engine.isLoaded == true)
+    print("Chatterbox q8 model loaded successfully")
+  }
 }

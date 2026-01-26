@@ -5,6 +5,17 @@
 
 import Foundation
 
+/// Quantization configuration from config.json
+struct CosyVoice2QuantizationConfig: Codable, Sendable {
+  var bits: Int
+  var groupSize: Int
+
+  enum CodingKeys: String, CodingKey {
+    case bits
+    case groupSize = "group_size"
+  }
+}
+
 /// Configuration for Qwen2-based LLM
 struct LLMConfig: Codable, Sendable {
   var llmInputSize: Int = 896
@@ -210,6 +221,9 @@ struct CosyVoice2Config: Codable, Sendable {
   var flow: FlowConfig = .init()
   var hifigan: HiFiGANConfig = .init()
 
+  // Quantization (optional, only present in quantized models)
+  var quantization: CosyVoice2QuantizationConfig?
+
   // Model paths
   var llmPath: String?
   var flowPath: String?
@@ -224,6 +238,7 @@ struct CosyVoice2Config: Codable, Sendable {
     case llm
     case flow
     case hifigan
+    case quantization
     case llmPath = "llm_path"
     case flowPath = "flow_path"
     case hifiganPath = "hifigan_path"
@@ -280,6 +295,12 @@ struct CosyVoice2Config: Codable, Sendable {
     if let hifiganDict = json["hifigan"] as? [String: Any] ?? json["hift"] as? [String: Any] {
       let hifiganData = try JSONSerialization.data(withJSONObject: hifiganDict)
       config.hifigan = try JSONDecoder().decode(HiFiGANConfig.self, from: hifiganData)
+    }
+
+    // Parse quantization config (optional, only present in quantized models)
+    if let quantDict = json["quantization"] as? [String: Any] {
+      let quantData = try JSONSerialization.data(withJSONObject: quantDict)
+      config.quantization = try JSONDecoder().decode(CosyVoice2QuantizationConfig.self, from: quantData)
     }
 
     return config
