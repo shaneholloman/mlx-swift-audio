@@ -6,7 +6,6 @@
 import Foundation
 import MLX
 import MLXNN
-import MLXRandom
 
 // MARK: - AttentionQKV
 

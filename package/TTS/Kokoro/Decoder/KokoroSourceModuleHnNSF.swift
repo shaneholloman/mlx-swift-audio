@@ -7,7 +7,6 @@
 import Foundation
 import MLX
 import MLXNN
-import MLXRandom
 
 class KokoroSourceModuleHnNSF: Module {
   private let sineAmp: Float

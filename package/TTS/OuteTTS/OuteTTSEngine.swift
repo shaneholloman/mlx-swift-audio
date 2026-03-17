@@ -6,6 +6,9 @@
 import AVFoundation
 import Foundation
 import MLX
+import MLXLMCommon
+import MLXLMHFAPI
+import MLXLMTokenizers
 
 /// OuteTTS engine - TTS with custom speaker profiles
 ///
@@ -37,10 +40,17 @@ public final class OuteTTSEngine: TTSEngine {
   @ObservationIgnored private var outeTTS: OuteTTS?
   @ObservationIgnored private let playback = TTSPlaybackController(sampleRate: TTSProvider.outetts.sampleRate)
   @ObservationIgnored private var whisperEngine: WhisperEngine?
+  @ObservationIgnored private let downloader: any Downloader
+  @ObservationIgnored private let tokenizerLoader: any TokenizerLoader
 
   // MARK: - Initialization
 
-  public init() {
+  public init(
+    from downloader: any Downloader = HubClient.default,
+    using tokenizerLoader: any TokenizerLoader = TokenizersLoader()
+  ) {
+    self.downloader = downloader
+    self.tokenizerLoader = tokenizerLoader
     Log.tts.debug("OuteTTSEngine initialized")
   }
 
@@ -56,6 +66,8 @@ public final class OuteTTSEngine: TTSEngine {
 
     do {
       outeTTS = try await OuteTTS.load(
+        from: downloader,
+        using: tokenizerLoader,
         progressHandler: progressHandler ?? { _ in },
       )
 
@@ -394,7 +406,7 @@ public final class OuteTTSEngine: TTSEngine {
   private func transcribeAudio(url: URL) async throws -> (text: String, words: [(word: String, start: Double, end: Double)]) {
     // Load Whisper engine if needed
     if whisperEngine == nil {
-      whisperEngine = WhisperEngine(modelSize: .base, quantization: .q4)
+      whisperEngine = WhisperEngine(modelSize: .base, quantization: .q4, from: downloader)
     }
 
     guard let whisper = whisperEngine else {

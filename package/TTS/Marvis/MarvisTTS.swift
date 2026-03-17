@@ -7,11 +7,9 @@
 
 import AVFoundation
 import Foundation
-import Hub
 import MLX
 import MLXLMCommon
 import MLXNN
-import Tokenizers
 
 // MARK: - MarvisTTS Actor
 
@@ -70,30 +68,31 @@ actor MarvisTTS {
     self.sampleRate = sampleRate
   }
 
-  /// Load and initialize a MarvisTTS instance.
-  ///
-  /// - Parameters:
-  ///   - repoId: Hugging Face repository ID for the model
-  ///   - progressHandler: Callback for download progress
-  /// - Returns: A fully initialized MarvisTTS actor
+  /// Load and initialize a MarvisTTS instance from local directories.
   static func load(
-    repoId: String = MarvisEngine.ModelVariant.default.repoId,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
+    from directory: URL,
+    mimiDirectory: URL,
+    using tokenizerLoader: any TokenizerLoader
   ) async throws -> MarvisTTS {
-    let (config, prompts, weightFileURL) = try await snapshotAndConfig(
-      repoId: repoId,
-      progressHandler: progressHandler,
-    )
+    let weightFileURL = directory.appending(path: "model.safetensors")
+    let promptDir = directory.appending(path: "prompts", directoryHint: .isDirectory)
+
+    var audioPromptURLs: [URL] = []
+    for url in try FileManager.default.contentsOfDirectory(at: promptDir, includingPropertiesForKeys: nil)
+      where url.pathExtension == "wav"
+    {
+      audioPromptURLs.append(url)
+    }
+
+    let configFileURL = directory.appending(path: "config.json")
+    let config = try JSONDecoder().decode(MarvisConfig.self, from: Data(contentsOf: configFileURL))
 
     // Initialize model
     let model = try MarvisModel(config: config)
 
     // Load tokenizers
-    let textTokenizer = try await loadTokenizer(
-      configuration: ModelConfiguration(id: repoId),
-      hub: HubApi.shared,
-    )
-    let mimi = try await Mimi.fromPretrained(progressHandler: progressHandler)
+    let textTokenizer = try await tokenizerLoader.load(from: directory)
+    let mimi = try Mimi.fromPretrained(from: mimiDirectory)
     let audioTokenizer = MimiTokenizer(mimi)
     let streamingDecoder = MimiStreamingDecoder(mimi)
 
@@ -108,12 +107,39 @@ actor MarvisTTS {
 
     return MarvisTTS(
       model: model,
-      promptURLs: prompts,
+      promptURLs: audioPromptURLs,
       textTokenizer: textTokenizer,
       audioTokenizer: audioTokenizer,
       streamingDecoder: streamingDecoder,
       sampleRate: mimi.config.sampleRate,
     )
+  }
+
+  /// Download and load a MarvisTTS instance.
+  static func load(
+    id: String = MarvisEngine.ModelVariant.default.repoId,
+    from downloader: any Downloader,
+    using tokenizerLoader: any TokenizerLoader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
+  ) async throws -> MarvisTTS {
+    let (_, _, weightFileURL) = try await snapshotAndConfig(
+      id: id,
+      from: downloader,
+      progressHandler: progressHandler,
+    )
+
+    let modelDirectoryURL = weightFileURL.deletingLastPathComponent()
+
+    // Download Mimi weights in parallel
+    let mimiDirectory = try await downloader.download(
+      id: "kyutai/moshiko-pytorch-bf16",
+      revision: nil,
+      matching: ["tokenizer-e351c8d8-checkpoint125.safetensors"],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+
+    return try await load(from: modelDirectoryURL, mimiDirectory: mimiDirectory, using: tokenizerLoader)
   }
 
   // MARK: - Public API
@@ -174,10 +200,17 @@ actor MarvisTTS {
   // MARK: - Model Loading
 
   private static func snapshotAndConfig(
-    repoId: String,
-    progressHandler: @escaping (Progress) -> Void,
+    id: String,
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void,
   ) async throws -> (config: MarvisConfig, promptURLs: [URL], weightFileURL: URL) {
-    let modelDirectoryURL = try await HubConfiguration.shared.snapshot(from: repoId, progressHandler: progressHandler)
+    let modelDirectoryURL = try await downloader.download(
+      id: id,
+      revision: nil,
+      matching: [],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
     let weightFileURL = modelDirectoryURL.appending(path: "model.safetensors")
     let promptDir = modelDirectoryURL.appending(path: "prompts", directoryHint: .isDirectory)
 

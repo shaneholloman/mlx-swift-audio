@@ -6,6 +6,9 @@
 import AVFoundation
 import Foundation
 import MLX
+import MLXLMCommon
+import MLXLMHFAPI
+import MLXLMTokenizers
 
 // MARK: - Reference Audio
 
@@ -85,11 +88,19 @@ public final class ChatterboxTurboEngine: TTSEngine {
   @ObservationIgnored private var chatterboxTurboTTS: ChatterboxTurboTTS?
   @ObservationIgnored private let playback = TTSPlaybackController(sampleRate: TTSProvider.chatterboxTurbo.sampleRate)
   @ObservationIgnored private var defaultReferenceAudio: ChatterboxTurboReferenceAudio?
+  @ObservationIgnored private let downloader: any Downloader
+  @ObservationIgnored private let tokenizerLoader: any TokenizerLoader
 
   // MARK: - Initialization
 
-  public init(quantization: ChatterboxTurboQuantization = .q4) {
+  public init(
+    quantization: ChatterboxTurboQuantization = .q4,
+    from downloader: any Downloader = HubClient.default,
+    using tokenizerLoader: any TokenizerLoader = TokenizersLoader()
+  ) {
     self.quantization = quantization
+    self.downloader = downloader
+    self.tokenizerLoader = tokenizerLoader
     Log.tts.debug("ChatterboxTurboEngine initialized with quantization: \(quantization.rawValue)")
   }
 
@@ -107,6 +118,8 @@ public final class ChatterboxTurboEngine: TTSEngine {
     do {
       chatterboxTurboTTS = try await ChatterboxTurboTTS.load(
         quantization: quantization,
+        from: downloader,
+        using: tokenizerLoader,
         progressHandler: progressHandler ?? { _ in }
       )
 

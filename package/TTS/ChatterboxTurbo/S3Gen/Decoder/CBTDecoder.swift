@@ -7,7 +7,6 @@
 
 import Foundation
 import MLX
-import MLXFast
 import MLXNN
 
 // MARK: - Conv1d PyTorch Format Wrapper

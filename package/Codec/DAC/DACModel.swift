@@ -5,8 +5,8 @@
 // License: licenses/dac.txt
 
 import Foundation
-import Hub
 import MLX
+import MLXLMCommon
 import MLXNN
 
 // MARK: - Encoder Block
@@ -224,20 +224,12 @@ final class DACCodec {
     sampleRate = config.sampleRate
   }
 
-  /// Load DAC model from Hugging Face Hub
+  /// Load DAC model from a local directory
   static func fromPretrained(
-    repoId: String = defaultRepoId,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
-  ) async throws -> DACCodec {
-    // Download model files from Hub
-    let modelDir = try await HubConfiguration.shared.snapshot(
-      from: repoId,
-      matching: ["*.safetensors", "*.json"],
-      progressHandler: progressHandler
-    )
-
+    from directory: URL
+  ) throws -> DACCodec {
     // Load config
-    let configURL = modelDir.appending(path: "config.json")
+    let configURL = directory.appending(path: "config.json")
     let configData = try Data(contentsOf: configURL)
     let config = try JSONDecoder().decode(DACConfig.self, from: configData)
 
@@ -265,7 +257,7 @@ final class DACCodec {
     )
 
     // Load weights
-    let weightsURL = modelDir.appending(path: "model.safetensors")
+    let weightsURL = directory.appending(path: "model.safetensors")
     let weights = try MLX.loadArrays(url: weightsURL)
 
     // Apply weights to encoder
@@ -278,6 +270,23 @@ final class DACCodec {
     try applyWeights(to: quantizer, weights: weights, prefix: "quantizer")
 
     return DACCodec(config: config, encoder: encoder, decoder: decoder, quantizer: quantizer)
+  }
+
+  /// Download and load DAC model
+  static func fromPretrained(
+    id: String = defaultRepoId,
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
+  ) async throws -> DACCodec {
+    let modelDir = try await downloader.download(
+      id: id,
+      revision: nil,
+      matching: ["*.safetensors", "*.json"],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+
+    return try fromPretrained(from: modelDir)
   }
 
   /// Encode audio to latent codes

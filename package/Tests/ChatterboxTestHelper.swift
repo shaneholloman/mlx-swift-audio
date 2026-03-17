@@ -2,6 +2,7 @@
 
 import Foundation
 import MLX
+import MLXLMHFAPI
 
 @testable import MLXAudio
 
@@ -51,7 +52,7 @@ enum ChatterboxTestHelper {
       return model
     }
     print("[ChatterboxTestHelper] Loading shared model (first time)...")
-    let model = try await ChatterboxModel.load()
+    let model = try await ChatterboxModel.load(from: HubClient.default)
     eval(model)
     _sharedModel = model
     print("[ChatterboxTestHelper] Shared model loaded and cached")

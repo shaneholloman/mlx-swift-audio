@@ -5,8 +5,10 @@
 
 import AVFoundation
 import Foundation
-import Hub
 import MLX
+import MLXLMCommon
+import MLXLMHFAPI
+import MLXLMTokenizers
 import MLXNN
 
 // MARK: - Speaker
@@ -160,13 +162,20 @@ public final class CosyVoice2Engine: TTSEngine {
   @ObservationIgnored private var whisperSTT: WhisperSTT?
   @ObservationIgnored private let playback = TTSPlaybackController(sampleRate: 24000)
   @ObservationIgnored private var defaultSpeaker: CosyVoice2Speaker?
+  @ObservationIgnored private let downloader: any Downloader
+  @ObservationIgnored private let tokenizerLoader: any TokenizerLoader
 
-  /// HuggingFace repo ID for S3 tokenizer
+  /// Repo ID for S3 tokenizer
   private static let s3TokenizerRepoId = "mlx-community/S3TokenizerV2"
 
   // MARK: - Initialization
 
-  public init() {
+  public init(
+    from downloader: any Downloader = HubClient.default,
+    using tokenizerLoader: any TokenizerLoader = TokenizersLoader()
+  ) {
+    self.downloader = downloader
+    self.tokenizerLoader = tokenizerLoader
     Log.tts.debug("CosyVoice2Engine initialized")
   }
 
@@ -183,12 +192,14 @@ public final class CosyVoice2Engine: TTSEngine {
     do {
       // Load CosyVoice2 model
       cosyVoice2TTS = try await CosyVoice2TTS.load(
+        from: downloader,
+        using: tokenizerLoader,
         progressHandler: progressHandler ?? { _ in }
       )
 
       // Load S3TokenizerV2
       Log.model.info("Loading S3TokenizerV2...")
-      s3Tokenizer = try await Self.loadS3Tokenizer()
+      s3Tokenizer = try await Self.loadS3Tokenizer(from: downloader)
 
       isLoaded = true
       Log.model.info("CosyVoice2 TTS model loaded successfully")
@@ -198,9 +209,15 @@ public final class CosyVoice2Engine: TTSEngine {
     }
   }
 
-  /// Load S3TokenizerV2 from HuggingFace
-  private static func loadS3Tokenizer() async throws -> S3TokenizerV2 {
-    let modelDirectory = try await HubConfiguration.shared.snapshot(from: s3TokenizerRepoId)
+  /// Download and load S3TokenizerV2
+  private static func loadS3Tokenizer(from downloader: any Downloader) async throws -> S3TokenizerV2 {
+    let modelDirectory = try await downloader.download(
+      id: s3TokenizerRepoId,
+      revision: nil,
+      matching: ["*.safetensors"],
+      useLatest: false,
+      progressHandler: { _ in }
+    )
     let weightURL = modelDirectory.appendingPathComponent("model.safetensors")
     let weights = try MLX.loadArrays(url: weightURL)
 
@@ -226,7 +243,8 @@ public final class CosyVoice2Engine: TTSEngine {
     Log.model.info("Loading Whisper for transcription...")
     let whisper = try await WhisperSTT.load(
       modelSize: .base,
-      quantization: .q4
+      quantization: .q4,
+      from: downloader
     )
     whisperSTT = whisper
     Log.model.info("Whisper loaded successfully")

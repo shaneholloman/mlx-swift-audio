@@ -9,7 +9,6 @@ import Foundation
 import MLX
 import MLXLMCommon
 import MLXNN
-import MLXRandom
 
 /// Token-To-Token (T3) TTS model using LLaMA as backbone.
 ///

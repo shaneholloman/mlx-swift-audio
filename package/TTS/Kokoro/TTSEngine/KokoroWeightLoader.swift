@@ -5,9 +5,9 @@
 // License: licenses/kokoro.txt
 
 import Foundation
-import Hub
 import MLX
 import MLXAudio
+import MLXLMCommon
 import MLXNN
 
 class KokoroWeightLoader {
@@ -16,22 +16,13 @@ class KokoroWeightLoader {
   static let defaultRepoId = "mlx-community/Kokoro-82M-bf16"
   static let defaultWeightsFilename = "kokoro-v1_0.safetensors"
 
+  /// Load weights from a local directory
   static func loadWeights(
-    repoId: String = defaultRepoId,
-    filename: String = defaultWeightsFilename,
-    progressHandler: @escaping (Progress) -> Void = { _ in },
-  ) async throws -> [String: MLXArray] {
-    let modelDirectoryURL = try await HubConfiguration.shared.snapshot(
-      from: repoId,
-      matching: [filename],
-      progressHandler: progressHandler
-    )
-    let weightFileURL = modelDirectoryURL.appending(path: filename)
-    return try loadWeights(from: weightFileURL)
-  }
-
-  static func loadWeights(from url: URL) throws -> [String: MLXArray] {
-    let weights = try MLX.loadArrays(url: url)
+    from directory: URL,
+    filename: String = defaultWeightsFilename
+  ) throws -> [String: MLXArray] {
+    let weightFileURL = directory.appending(path: filename)
+    let weights = try MLX.loadArrays(url: weightFileURL)
     var sanitizedWeights: [String: MLXArray] = [:]
 
     for (key, value) in weights {
@@ -98,6 +89,23 @@ class KokoroWeightLoader {
     }
 
     return sanitizedWeights
+  }
+
+  /// Download and load weights
+  static func loadWeights(
+    id: String = defaultRepoId,
+    filename: String = defaultWeightsFilename,
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
+  ) async throws -> [String: MLXArray] {
+    let modelDirectoryURL = try await downloader.download(
+      id: id,
+      revision: nil,
+      matching: [filename],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+    return try loadWeights(from: modelDirectoryURL, filename: filename)
   }
 
   private static func checkArrayShape(arr: MLXArray) -> Bool {

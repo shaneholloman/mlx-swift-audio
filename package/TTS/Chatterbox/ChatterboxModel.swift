@@ -4,7 +4,6 @@
 // License: licenses/chatterbox.txt
 
 import Foundation
-import Hub
 import MLX
 import MLXLMCommon
 import MLXNN
@@ -138,21 +137,21 @@ struct ChatterboxConditionals: @unchecked Sendable {
 ///
 /// Note: Use `ChatterboxTTS` (actor) for thread-safe access.
 class ChatterboxModel: Module {
-  /// Base Hugging Face repository name for Chatterbox TTS
+  /// Base repository name for Chatterbox TTS
   private static let baseRepoName = "Chatterbox-TTS"
 
-  /// Hugging Face repository for S3TokenizerV2 (shared across TTS models)
+  /// Repository ID for S3TokenizerV2 (shared across TTS models)
   static let s3TokenizerRepoId = "mlx-community/S3TokenizerV2"
 
-  /// Get Hugging Face repository ID for specified quantization level
+  /// Get repository ID for specified quantization level
   ///
   /// - Parameter quantization: The quantization level (default: q4)
-  /// - Returns: The HuggingFace repository ID
+  /// - Returns: The repository ID
   static func repoId(quantization: ChatterboxQuantization = .q4) -> String {
     "mlx-community/\(baseRepoName)-\(quantization.rawValue)"
   }
 
-  /// Default Hugging Face repository ID (4-bit quantized)
+  /// Default repository ID (4-bit quantized)
   ///
   /// Convenience property that returns the 4-bit variant.
   /// Use `repoId(quantization:)` for other quantization levels.
@@ -342,42 +341,14 @@ class ChatterboxModel: Module {
     return sanitized
   }
 
-  /// Load Chatterbox TTS model from Hugging Face Hub
-  ///
-  /// Loads the main model weights (T3, S3Gen, VoiceEncoder) from the Chatterbox repo
-  /// and the S3Tokenizer weights from a separate shared repo.
-  ///
-  /// - Parameters:
-  ///   - quantization: Quantization level (fp16, 8bit, 4bit). Default is 4bit.
-  ///   - s3TokenizerRepoId: Hugging Face repository ID for S3Tokenizer (default: mlx-community/S3TokenizerV2)
-  ///   - progressHandler: Optional callback for download progress
-  /// - Returns: Initialized ChatterboxModel with loaded weights
+  /// Load Chatterbox TTS model from local directories
   static func load(
-    quantization: ChatterboxQuantization = .q4,
-    s3TokenizerRepoId: String = s3TokenizerRepoId,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
-  ) async throws -> ChatterboxModel {
-    let repoId = repoId(quantization: quantization)
-
-    // Download both repos in parallel
-    Log.model.info("Loading Chatterbox (\(quantization.rawValue)) from \(repoId) and S3Tokenizer from \(s3TokenizerRepoId)...")
-
-    async let modelDirectoryTask = HubConfiguration.shared.snapshot(
-      from: repoId,
-      matching: ["model.safetensors", "tokenizer.json", "config.json"],
-      progressHandler: progressHandler
-    )
-
-    async let s3TokenizerDirectoryTask = HubConfiguration.shared.snapshot(
-      from: s3TokenizerRepoId,
-      matching: ["model.safetensors", "config.json"],
-      progressHandler: progressHandler
-    )
-
-    let (modelDirectory, s3TokenizerDirectory) = try await (modelDirectoryTask, s3TokenizerDirectoryTask)
-
+    from directory: URL,
+    s3TokenizerDirectory: URL,
+    quantization: ChatterboxQuantization = .q4
+  ) throws -> ChatterboxModel {
     // Load Chatterbox weights and sanitize (remove computed buffers like freqs_cis)
-    let weightFileURL = modelDirectory.appending(path: "model.safetensors")
+    let weightFileURL = directory.appending(path: "model.safetensors")
     let rawWeights = try MLX.loadArrays(url: weightFileURL)
     let weights = sanitizeWeights(rawWeights)
 
@@ -417,12 +388,44 @@ class ChatterboxModel: Module {
     eval(model)
 
     // Load text tokenizer
-    let tokenizerPath = modelDirectory.appending(path: "tokenizer.json")
+    let tokenizerPath = directory.appending(path: "tokenizer.json")
     try model.loadTextTokenizer(vocabFilePath: tokenizerPath.path)
 
-    Log.model.info("Chatterbox TTS model (\(quantization.rawValue)) loaded successfully")
+    Log.model.info("Chatterbox TTS model loaded successfully")
 
     return model
+  }
+
+  /// Download and load Chatterbox TTS model
+  static func load(
+    quantization: ChatterboxQuantization = .q4,
+    s3TokenizerRepoId: String = s3TokenizerRepoId,
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
+  ) async throws -> ChatterboxModel {
+    let repoId = repoId(quantization: quantization)
+
+    Log.model.info("Loading Chatterbox (\(quantization.rawValue)) from \(repoId) and S3Tokenizer from \(s3TokenizerRepoId)...")
+
+    async let modelDirectoryTask = downloader.download(
+      id: repoId,
+      revision: nil,
+      matching: ["model.safetensors", "tokenizer.json", "config.json"],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+
+    async let s3TokenizerDirectoryTask = downloader.download(
+      id: s3TokenizerRepoId,
+      revision: nil,
+      matching: ["model.safetensors", "config.json"],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+
+    let (modelDirectory, s3TokenizerDirectory) = try await (modelDirectoryTask, s3TokenizerDirectoryTask)
+
+    return try load(from: modelDirectory, s3TokenizerDirectory: s3TokenizerDirectory, quantization: quantization)
   }
 
   /// Prepare conditioning from a reference audio clip

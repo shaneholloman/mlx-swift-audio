@@ -8,6 +8,7 @@
 import Accelerate
 import Foundation
 import MLX
+import MLXLMCommon
 
 // MARK: - Audio Feature Extraction
 
@@ -350,12 +351,23 @@ final class OuteTTSAudioProcessor {
   }
 
   /// Create a fully initialized audio processor with the DAC codec loaded.
+  /// Create from a local DAC model directory
   static func create(
     sampleRate: Int = 24000,
-    repoId: String = DACCodec.defaultRepoId,
+    from dacDirectory: URL
+  ) throws -> OuteTTSAudioProcessor {
+    let codec = try DACCodec.fromPretrained(from: dacDirectory)
+    return OuteTTSAudioProcessor(audioCodec: codec, sampleRate: sampleRate)
+  }
+
+  /// Download DAC model and create processor
+  static func create(
+    sampleRate: Int = 24000,
+    id: String = DACCodec.defaultRepoId,
+    from downloader: any Downloader,
     progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
   ) async throws -> OuteTTSAudioProcessor {
-    let codec = try await DACCodec.fromPretrained(repoId: repoId, progressHandler: progressHandler)
+    let codec = try await DACCodec.fromPretrained(id: id, from: downloader, progressHandler: progressHandler)
     return OuteTTSAudioProcessor(audioCodec: codec, sampleRate: sampleRate)
   }
 

@@ -6,6 +6,8 @@
 import AVFoundation
 import Foundation
 import MLX
+import MLXLMCommon
+import MLXLMHFAPI
 
 // MARK: - Reference Audio
 
@@ -97,11 +99,16 @@ public final class ChatterboxEngine: TTSEngine {
   @ObservationIgnored private var chatterboxTTS: ChatterboxTTS?
   @ObservationIgnored private let playback = TTSPlaybackController(sampleRate: TTSProvider.chatterbox.sampleRate)
   @ObservationIgnored private var defaultReferenceAudio: ChatterboxReferenceAudio?
+  @ObservationIgnored private let downloader: any Downloader
 
   // MARK: - Initialization
 
-  public init(quantization: ChatterboxQuantization = .q4) {
+  public init(
+    quantization: ChatterboxQuantization = .q4,
+    from downloader: any Downloader = HubClient.default
+  ) {
     self.quantization = quantization
+    self.downloader = downloader
     Log.tts.debug("ChatterboxEngine initialized with quantization: \(quantization.rawValue)")
   }
 
@@ -119,6 +126,7 @@ public final class ChatterboxEngine: TTSEngine {
     do {
       chatterboxTTS = try await ChatterboxTTS.load(
         quantization: quantization,
+        from: downloader,
         progressHandler: progressHandler ?? { _ in },
       )
 

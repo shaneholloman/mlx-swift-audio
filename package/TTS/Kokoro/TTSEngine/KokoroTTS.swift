@@ -7,6 +7,7 @@
 import Foundation
 import MLX
 import MLXAudio
+import MLXLMCommon
 import MLXNN
 import Synchronization
 
@@ -52,11 +53,6 @@ actor KokoroTTS {
   private let model: KokoroModel
   private let eSpeakEngine: ESpeakNGEngine
   private let kokoroTokenizer: KokoroTokenizer
-  private let repoId: String
-  private let progressHandler: @Sendable (Progress) -> Void
-
-  private var chosenVoice: KokoroEngine.Voice?
-  private var voice: MLXArray?
 
   // MARK: - Initialization
 
@@ -64,25 +60,15 @@ actor KokoroTTS {
     model: KokoroModel,
     eSpeakEngine: ESpeakNGEngine,
     kokoroTokenizer: KokoroTokenizer,
-    repoId: String,
-    progressHandler: @escaping @Sendable (Progress) -> Void,
   ) {
     self.model = model
     self.eSpeakEngine = eSpeakEngine
     self.kokoroTokenizer = kokoroTokenizer
-    self.repoId = repoId
-    self.progressHandler = progressHandler
   }
 
-  /// Load and initialize a KokoroTTS instance.
-  ///
-  /// - Parameters:
-  ///   - repoId: Hugging Face repository ID for the model
-  ///   - progressHandler: Callback for download progress
-  /// - Returns: A fully initialized KokoroTTS actor
+  /// Load and initialize a KokoroTTS instance from a local directory.
   static func load(
-    repoId: String = KokoroWeightLoader.defaultRepoId,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
+    from directory: URL
   ) async throws -> KokoroTTS {
     // Initialize text processing components
     let eSpeakEngine = try ESpeakNGEngine()
@@ -93,11 +79,8 @@ actor KokoroTTS {
     async let gbLexicon = LexiconLoader.loadGBLexicon()
     try await kokoroTokenizer.setLexicons(us: usLexicon, gb: gbLexicon)
 
-    // Load weights from Hugging Face
-    let weights = try await KokoroWeightLoader.loadWeights(
-      repoId: repoId,
-      progressHandler: progressHandler,
-    )
+    // Load weights from local directory
+    let weights = try KokoroWeightLoader.loadWeights(from: directory)
 
     // Create model and load weights
     let model = KokoroModel()
@@ -108,16 +91,36 @@ actor KokoroTTS {
       model: model,
       eSpeakEngine: eSpeakEngine,
       kokoroTokenizer: kokoroTokenizer,
-      repoId: repoId,
-      progressHandler: progressHandler,
     )
+  }
+
+  /// Download and load a KokoroTTS instance.
+  static func load(
+    id: String = KokoroWeightLoader.defaultRepoId,
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
+  ) async throws -> KokoroTTS {
+    let directory = try await downloader.download(
+      id: id,
+      revision: nil,
+      matching: [KokoroWeightLoader.defaultWeightsFilename],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+
+    return try await load(from: directory)
   }
 
   // MARK: - Public API
 
+  /// Set the language for text processing based on the voice.
+  func setLanguage(for voice: KokoroEngine.Voice) throws {
+    try kokoroTokenizer.setLanguage(for: voice)
+  }
+
   func generate(
     text: String,
-    voice: KokoroEngine.Voice,
+    voiceData: MLXArray,
     speed: Float = 1.0,
   ) async throws -> TTSGenerationResult {
     let startTime = CFAbsoluteTimeGetCurrent()
@@ -127,14 +130,12 @@ actor KokoroTTS {
       throw KokoroTTSError.sentenceSplitError
     }
 
-    self.voice = nil
-
     var allAudio: [Float] = []
     for sentence in sentences {
       // Check for cancellation between sentences
       try Task.checkCancellation()
 
-      let audioChunks = try await generateAudioChunks(text: sentence, voice: voice, speed: speed)
+      let audioChunks = try generateAudioChunks(text: sentence, voiceData: voiceData, speed: speed)
       for chunk in audioChunks {
         allAudio.append(contentsOf: chunk)
         MLXMemory.clearCache()
@@ -151,7 +152,7 @@ actor KokoroTTS {
 
   func generateStreaming(
     text: String,
-    voice: KokoroEngine.Voice,
+    voiceData: MLXArray,
     speed: Float = 1.0,
   ) async throws -> AsyncThrowingStream<[Float], Error> {
     let sentences = SentenceTokenizer.splitIntoSentences(text: text)
@@ -159,7 +160,6 @@ actor KokoroTTS {
       throw KokoroTTSError.sentenceSplitError
     }
 
-    self.voice = nil
     let sentenceIndex = Atomic<Int>(0)
     let pendingChunks = Mutex<[[Float]]>([])
 
@@ -183,7 +183,7 @@ actor KokoroTTS {
       // Check for cancellation before generating each sentence
       try Task.checkCancellation()
 
-      let audioChunks = try await self.generateAudioChunks(text: sentences[i], voice: voice, speed: speed)
+      let audioChunks = try await self.generateAudioChunks(text: sentences[i], voiceData: voiceData, speed: speed)
 
       guard !audioChunks.isEmpty else { return nil }
 
@@ -206,24 +206,11 @@ actor KokoroTTS {
   /// Returns an array of audio chunks to support proper streaming when text is split.
   private func generateAudioChunks(
     text: String,
-    voice: KokoroEngine.Voice,
+    voiceData: MLXArray,
     speed: Float,
-  ) async throws -> [[Float]] {
+  ) throws -> [[Float]] {
     if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       return [[0.0]]
-    }
-
-    // Load voice if it changed or if it was cleared
-    if chosenVoice != voice || self.voice == nil {
-      self.voice = try await VoiceLoader.loadVoice(
-        voice,
-        repoId: repoId,
-        progressHandler: progressHandler,
-      )
-      self.voice?.eval()
-
-      try kokoroTokenizer.setLanguage(for: voice)
-      chosenVoice = voice
     }
 
     let phonemizedResult = try kokoroTokenizer.phonemize(text)
@@ -237,13 +224,11 @@ actor KokoroTTS {
       if let (firstHalf, secondHalf) = TextSplitter.splitAtPunctuationBoundary(text) {
         Log.tts.debug("KokoroTTS: Split into '\(firstHalf.prefix(30))...' and '\(secondHalf.prefix(30))...'")
 
-        // Generate audio for both halves, returning separate chunks for streaming
-        let firstChunks = try await generateAudioChunks(text: firstHalf, voice: voice, speed: speed)
-        let secondChunks = try await generateAudioChunks(text: secondHalf, voice: voice, speed: speed)
+        let firstChunks = try generateAudioChunks(text: firstHalf, voiceData: voiceData, speed: speed)
+        let secondChunks = try generateAudioChunks(text: secondHalf, voiceData: voiceData, speed: speed)
 
         return firstChunks + secondChunks
       } else {
-        // Could not find a split point - if still under max, proceed; otherwise fail
         guard inputIds.count <= Self.maxTokenCount else {
           Log.tts.error("KokoroTTS: Text too long and cannot be split (\(inputIds.count) tokens)")
           throw KokoroTTSError.tooManyTokens
@@ -252,11 +237,12 @@ actor KokoroTTS {
       }
     }
 
-    return try [generateAudioForTokens(inputIds: inputIds, speed: speed)]
+    return try [generateAudioForTokens(inputIds: inputIds, voiceData: voiceData, speed: speed)]
   }
 
   private func generateAudioForTokens(
     inputIds: [Int],
+    voiceData: MLXArray,
     speed: Float,
   ) throws -> [Float] {
     let paddedInputIdsBase = [0] + inputIds + [0]
@@ -287,13 +273,9 @@ actor KokoroTTS {
     let dEn = model.bertEncoder(bertDur).transposed(0, 2, 1)
     dEn.eval()
 
-    guard let voice else {
-      throw KokoroTTSError.voiceLoadFailed
-    }
-
     // Voice shape is [510, 1, 256], index by phoneme length to get [1, 256]
-    let voiceIdx = min(inputIds.count - 1, voice.shape[0] - 1)
-    let refS = voice[voiceIdx]
+    let voiceIdx = min(inputIds.count - 1, voiceData.shape[0] - 1)
+    let refS = voiceData[voiceIdx]
     refS.eval()
 
     // Extract style vector: columns 128+ for duration/prosody prediction

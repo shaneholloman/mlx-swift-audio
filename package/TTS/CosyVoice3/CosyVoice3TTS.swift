@@ -4,10 +4,9 @@
 // License: licenses/cosyvoice.txt
 
 import Foundation
-import Hub
 import MLX
+import MLXLMCommon
 import MLXNN
-import Tokenizers
 
 /// Actor wrapper for CosyVoice3Model that provides thread-safe generation
 actor CosyVoice3TTS {
@@ -21,7 +20,7 @@ actor CosyVoice3TTS {
   private nonisolated(unsafe) let speakerEncoder: CAMPlusSpeakerEncoder
 
   /// Text tokenizer (Qwen2 with CosyVoice3 special tokens)
-  private let textTokenizer: Tokenizer
+  private let textTokenizer: any MLXLMCommon.Tokenizer
 
   /// Output sample rate (24kHz for CosyVoice3)
   static let outputSampleRate: Int = CosyVoice3Constants.sampleRate
@@ -67,36 +66,26 @@ actor CosyVoice3TTS {
   // MARK: - Initialization
 
   private init(
-    model: CosyVoice3Model, speakerEncoder: CAMPlusSpeakerEncoder, textTokenizer: Tokenizer
+    model: CosyVoice3Model, speakerEncoder: CAMPlusSpeakerEncoder, textTokenizer: any MLXLMCommon.Tokenizer
   ) {
     self.model = model
     self.speakerEncoder = speakerEncoder
     self.textTokenizer = textTokenizer
   }
 
-  /// Default HuggingFace repository ID for CosyVoice3
+  /// Default repository ID for CosyVoice3
   static let defaultRepoId = CosyVoice3Constants.defaultRepoId
 
-  /// Load CosyVoice3TTS from HuggingFace repository
-  /// - Parameters:
-  ///   - repoId: HuggingFace repository ID (default: mlx-community/Fun-CosyVoice3-0.5B-2512-4bit)
-  ///   - progressHandler: Optional progress handler for download
-  /// - Returns: Loaded CosyVoice3TTS instance
+  /// Load CosyVoice3TTS from a local directory
   static func load(
-    repoId: String = defaultRepoId,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+    from directory: URL,
+    using tokenizerLoader: any TokenizerLoader
   ) async throws -> CosyVoice3TTS {
-    // Download model snapshot from HuggingFace
-    let modelDirectory = try await HubConfiguration.shared.snapshot(
-      from: repoId,
-      progressHandler: progressHandler
-    )
-
     // Load configuration
-    let config = try CosyVoice3Config.fromPretrained(modelPath: modelDirectory.path)
+    let config = try CosyVoice3Config.fromPretrained(modelPath: directory.path)
 
     // Load model weights
-    let modelURL = modelDirectory.appendingPathComponent("model.safetensors")
+    let modelURL = directory.appendingPathComponent("model.safetensors")
     guard FileManager.default.fileExists(atPath: modelURL.path) else {
       throw CosyVoice3Error.modelNotLoaded
     }
@@ -119,19 +108,27 @@ actor CosyVoice3TTS {
     }
 
     // Load text tokenizer (Qwen2 with CosyVoice3 special tokens)
-    let textTokenizer = try await loadTokenizer(modelDirectory: modelDirectory)
+    let textTokenizer = try await tokenizerLoader.load(from: directory)
 
     return CosyVoice3TTS(model: model, speakerEncoder: speakerEncoder, textTokenizer: textTokenizer)
   }
 
-  /// Load Qwen2 tokenizer from model directory
-  /// - Parameter modelDirectory: URL to the model directory containing tokenizer files
-  /// - Returns: Tokenizer configured for CosyVoice3
-  ///
-  /// Supports both tokenizer.json (fast format) and vocab.json + merges.txt (BPE format)
-  private static func loadTokenizer(modelDirectory: URL) async throws -> Tokenizer {
-    // Use AutoTokenizer which handles both tokenizer.json and vocab.json formats
-    try await AutoTokenizer.from(modelFolder: modelDirectory)
+  /// Download and load CosyVoice3TTS
+  static func load(
+    id: String = defaultRepoId,
+    from downloader: any Downloader,
+    using tokenizerLoader: any TokenizerLoader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+  ) async throws -> CosyVoice3TTS {
+    let modelDirectory = try await downloader.download(
+      id: id,
+      revision: nil,
+      matching: [],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+
+    return try await load(from: modelDirectory, using: tokenizerLoader)
   }
 
   /// Create model from config and weights
@@ -140,7 +137,7 @@ actor CosyVoice3TTS {
     weights: [String: MLXArray]
   ) throws -> CosyVoice3Model {
     // Create Qwen2 config for LLM
-    var qwen2Config = CosyVoice3Qwen2Config()
+    var qwen2Config = CosyVoiceQwen2Config()
     qwen2Config.hiddenSize = config.llm.hiddenSize
     qwen2Config.numHiddenLayers = config.llm.numHiddenLayers
     qwen2Config.intermediateSize = config.llm.intermediateSize
@@ -767,7 +764,7 @@ actor CosyVoice3TTS {
 
   /// Decode token IDs back to text
   func decode(tokens: [Int], skipSpecialTokens: Bool = true) -> String {
-    textTokenizer.decode(tokens: tokens, skipSpecialTokens: skipSpecialTokens)
+    textTokenizer.decode(tokenIds: tokens, skipSpecialTokens: skipSpecialTokens)
   }
 
   /// Get the token ID for a specific token string

@@ -2,8 +2,9 @@
 
 import AVFoundation
 import Foundation
-import Hub
 import MLX
+import MLXLMHFAPI
+import MLXLMTokenizers
 import MLXNN
 import Testing
 
@@ -23,7 +24,10 @@ enum ChatterboxTurboTestHelper {
       return model
     }
     print("[ChatterboxTurboTestHelper] Loading shared model (first time)...")
-    let model = try await ChatterboxTurboModel.load()
+    let model = try await ChatterboxTurboModel.load(
+      from: HubClient.default,
+      using: TokenizersLoader()
+    )
     eval(model)
     _sharedModel = model
     print("[ChatterboxTurboTestHelper] Shared model loaded and cached")
@@ -257,7 +261,11 @@ struct ChatterboxTurboTests {
     print("=== ChatterboxTurbo Q8 Model Loading Test ===\n")
 
     let loadStart = CFAbsoluteTimeGetCurrent()
-    let model = try await ChatterboxTurboModel.load(quantization: .q8)
+    let model = try await ChatterboxTurboModel.load(
+      quantization: .q8,
+      from: HubClient.default,
+      using: TokenizersLoader()
+    )
     let loadTime = CFAbsoluteTimeGetCurrent() - loadStart
 
     print("Q8 model loaded in \(String(format: "%.2f", loadTime))s")

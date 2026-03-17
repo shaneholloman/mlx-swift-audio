@@ -6,7 +6,6 @@
 import Foundation
 import MLX
 import MLXNN
-import MLXRandom
 
 /// Learned position embeddings for T3 model
 class LearnedPositionEmbeddings: Module {

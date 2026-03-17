@@ -51,7 +51,7 @@ public struct FunASRModelVariant: Sendable, Equatable {
     self.quantization = quantization
   }
 
-  /// HuggingFace repository ID
+  /// Repository ID
   public var repoId: String {
     "mlx-community/\(modelType.rawValue)-2512-\(quantization.rawValue)"
   }

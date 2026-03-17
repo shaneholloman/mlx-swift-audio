@@ -5,6 +5,7 @@
 
 import Foundation
 import MLX
+import MLXLMCommon
 import Synchronization
 
 /// Actor wrapper for ChatterboxModel that provides thread-safe generation
@@ -30,18 +31,29 @@ actor ChatterboxTTS {
     self.model = model
   }
 
-  /// Load ChatterboxTTS from Hugging Face Hub
-  ///
-  /// - Parameters:
-  ///   - quantization: Quantization level (fp16, 8bit, 4bit). Default is 4bit.
-  ///   - progressHandler: Optional callback for download progress
-  /// - Returns: Initialized ChatterboxTTS instance
+  /// Load ChatterboxTTS from local directories
+  static func load(
+    from directory: URL,
+    s3TokenizerDirectory: URL,
+    quantization: ChatterboxQuantization = .q4
+  ) throws -> ChatterboxTTS {
+    let model = try ChatterboxModel.load(
+      from: directory,
+      s3TokenizerDirectory: s3TokenizerDirectory,
+      quantization: quantization
+    )
+    return ChatterboxTTS(model: model)
+  }
+
+  /// Download and load ChatterboxTTS
   static func load(
     quantization: ChatterboxQuantization = .q4,
+    from downloader: any Downloader,
     progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
   ) async throws -> ChatterboxTTS {
     let model = try await ChatterboxModel.load(
       quantization: quantization,
+      from: downloader,
       progressHandler: progressHandler,
     )
     return ChatterboxTTS(model: model)

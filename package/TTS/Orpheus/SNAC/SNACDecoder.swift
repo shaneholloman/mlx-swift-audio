@@ -5,8 +5,8 @@
 // License: licenses/orpheus.txt
 
 import Foundation
-import Hub
 import MLX
+import MLXLMCommon
 import MLXNN
 
 // MARK: - SNAC Decoder Model
@@ -288,41 +288,57 @@ class SNACDecoder: Module {
     return x
   }
 
+  /// Load weights from a local directory
   static func loadWeights(
-    repoId: String = defaultRepoId,
+    from directory: URL,
+    filename: String = defaultWeightsFilename
+  ) throws -> [String: MLXArray] {
+    let weightFileURL = directory.appending(path: filename)
+    return try MLX.loadArrays(url: weightFileURL)
+  }
+
+  /// Download and load weights
+  static func loadWeights(
+    id: String = defaultRepoId,
     filename: String = defaultWeightsFilename,
-    progressHandler: @escaping (Progress) -> Void = { _ in },
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
   ) async throws -> [String: MLXArray] {
-    let modelDirectoryURL = try await HubConfiguration.shared.snapshot(
-      from: repoId,
+    let modelDirectoryURL = try await downloader.download(
+      id: id,
+      revision: nil,
       matching: [filename],
+      useLatest: false,
       progressHandler: progressHandler
     )
-    let weightFileURL = modelDirectoryURL.appending(path: filename)
-    return try loadWeights(from: weightFileURL)
+    return try loadWeights(from: modelDirectoryURL, filename: filename)
   }
 
-  static func loadWeights(from url: URL) throws -> [String: MLXArray] {
-    try MLX.loadArrays(url: url)
-  }
-
+  /// Load config from a local directory
   static func loadConfig(
-    repoId: String = defaultRepoId,
-    filename: String = "config.json",
-    progressHandler: @escaping (Progress) -> Void = { _ in }
-  ) async throws -> SNACConfig {
-    let modelDirectoryURL = try await HubConfiguration.shared.snapshot(
-      from: repoId,
-      matching: [filename],
-      progressHandler: progressHandler
-    )
-    let configFileURL = modelDirectoryURL.appending(path: filename)
-    return try loadConfig(from: configFileURL)
+    from directory: URL,
+    filename: String = "config.json"
+  ) throws -> SNACConfig {
+    let configFileURL = directory.appending(path: filename)
+    let data = try Data(contentsOf: configFileURL)
+    return try JSONDecoder().decode(SNACConfig.self, from: data)
   }
 
-  static func loadConfig(from url: URL) throws -> SNACConfig {
-    let data = try Data(contentsOf: url)
-    return try JSONDecoder().decode(SNACConfig.self, from: data)
+  /// Download and load config
+  static func loadConfig(
+    id: String = defaultRepoId,
+    filename: String = "config.json",
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+  ) async throws -> SNACConfig {
+    let modelDirectoryURL = try await downloader.download(
+      id: id,
+      revision: nil,
+      matching: [filename],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+    return try loadConfig(from: modelDirectoryURL, filename: filename)
   }
 
   private func embedCodes(codes: [[Int]]) -> MLXArray {

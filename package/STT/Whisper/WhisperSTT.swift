@@ -5,6 +5,7 @@
 
 import Foundation
 import MLX
+import MLXLMCommon
 import Synchronization
 
 /// Actor wrapper for Whisper model that provides thread-safe transcription
@@ -23,40 +24,53 @@ actor WhisperSTT {
     self.tokenizer = tokenizer
   }
 
-  /// Load WhisperSTT from Hugging Face Hub
-  ///
-  /// - Parameters:
-  ///   - modelSize: Model size to load
-  ///   - quantization: Quantization level (fp16, 8bit, 4bit). Default is 4bit.
-  ///   - progressHandler: Optional callback for download/load progress
-  /// - Returns: Initialized WhisperSTT instance
+  /// Load WhisperSTT from a local directory
   static func load(
-    modelSize: WhisperModelSize,
-    quantization: WhisperQuantization = .q4,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+    from directory: URL,
+    quantization: WhisperQuantization = .q4
   ) async throws -> WhisperSTT {
-    // Load model first (the slow operation with progress)
-    let model = try await WhisperModel.load(
-      modelSize: modelSize,
-      quantization: quantization,
-      progressHandler: progressHandler
-    )
+    let model = try WhisperModel.load(from: directory, quantization: quantization)
 
-    // Then load tokenizer (fast operation) with correct vocabulary for model type
-    // Pass model directory so tokenizer can find vocab files bundled with the model
-    // numLanguages must match the model's actual language count (from n_vocab)
-    // Different models have different counts (base: 99, large-v3-turbo: 100)
     let tokenizer = try await WhisperTokenizer.load(
       isMultilingual: model.isMultilingual,
       numLanguages: model.numLanguages,
       modelDirectory: model.modelDirectory
     )
 
-    // Validate tokenizer configuration matches model expectations
-    // This catches critical bugs like off-by-one errors in special token IDs
+    try validateTokenizer(tokenizer, model: model)
+
+    return WhisperSTT(model: model, tokenizer: tokenizer)
+  }
+
+  /// Download and load WhisperSTT
+  static func load(
+    modelSize: WhisperModelSize,
+    quantization: WhisperQuantization = .q4,
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+  ) async throws -> WhisperSTT {
+    let model = try await WhisperModel.load(
+      modelSize: modelSize,
+      quantization: quantization,
+      from: downloader,
+      progressHandler: progressHandler
+    )
+
+    let tokenizer = try await WhisperTokenizer.load(
+      isMultilingual: model.isMultilingual,
+      numLanguages: model.numLanguages,
+      modelDirectory: model.modelDirectory
+    )
+
+    try validateTokenizer(tokenizer, model: model)
+
+    return WhisperSTT(model: model, tokenizer: tokenizer)
+  }
+
+  /// Validate tokenizer configuration matches model expectations
+  private static func validateTokenizer(_ tokenizer: WhisperTokenizer, model: WhisperModel) throws {
     let modelVocabSize = model.dims.n_vocab
 
-    // Verify key special tokens are in valid range
     let maxTokenId = max(
       tokenizer.eot,
       tokenizer.sot,
@@ -75,20 +89,16 @@ actor WhisperSTT {
       )
     }
 
-    // Verify critical token IDs are consistent with model's numLanguages
-    // Token IDs depend on numLanguages which varies by model (base: 99, large-v3-turbo: 100)
     let expectedBaseVocab = model.isMultilingual ? 50257 : 50256
     let expectedEot = expectedBaseVocab
     let expectedSot = expectedBaseVocab + 1
-    let expectedTranscribe = expectedSot + 1 + model.numLanguages + 1 // sot + numLangs + translate + transcribe
-    let expectedTimestampBegin = expectedTranscribe + 5 // transcribe + sotLm + sotPrev + noSpeech + noTimestamps + first_timestamp
+    let expectedTranscribe = expectedSot + 1 + model.numLanguages + 1
+    let expectedTimestampBegin = expectedTranscribe + 5
 
     assert(tokenizer.eot == expectedEot, "EOT token mismatch: got \(tokenizer.eot), expected \(expectedEot)")
     assert(tokenizer.sot == expectedSot, "SOT token mismatch: got \(tokenizer.sot), expected \(expectedSot)")
     assert(tokenizer.transcribe == expectedTranscribe, "Transcribe token mismatch: got \(tokenizer.transcribe), expected \(expectedTranscribe)")
     assert(tokenizer.timestampBegin == expectedTimestampBegin, "TimestampBegin mismatch: got \(tokenizer.timestampBegin), expected \(expectedTimestampBegin)")
-
-    return WhisperSTT(model: model, tokenizer: tokenizer)
   }
 
   // MARK: - Transcription

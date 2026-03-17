@@ -6,11 +6,9 @@
 // License: licenses/marvis.txt
 
 import Foundation
-import Hub
 import MLX
 import MLXLMCommon
 import MLXNN
-import Tokenizers
 
 // MARK: - Configs
 
@@ -239,42 +237,22 @@ final class MimiStreamingDecoder {
 }
 
 extension Mimi {
-  static func fromPretrained(repoId: String = "kyutai/moshiko-pytorch-bf16", filename: String = "tokenizer-e351c8d8-checkpoint125.safetensors", progressHandler: @escaping (Progress) -> Void) async throws -> Mimi {
-    Log.model.info("[Mimi] Starting Mimi model loading from \(repoId)")
+  /// Load Mimi model from a local directory
+  static func fromPretrained(from directory: URL, filename: String = "tokenizer-e351c8d8-checkpoint125.safetensors") throws -> Mimi {
+    Log.model.info("[Mimi] Loading Mimi model from local directory")
 
-    Log.model.debug("[Mimi] Creating configuration...")
     let mimiConfig = mimi_202407(numCodebooks: 32)
-
-    Log.model.debug("[Mimi] Initializing Mimi model with config...")
-    let modelInitStart = CFAbsoluteTimeGetCurrent()
     let model = Mimi(config: mimiConfig)
-    let modelInitTime = CFAbsoluteTimeGetCurrent() - modelInitStart
-    Log.model.debug("[Mimi] Model initialization completed in \(modelInitTime, format: .fixed(precision: 2)) seconds")
 
-    Log.model.debug("[Mimi] Downloading/snapshotting weights file...")
-    let snapshotStart = CFAbsoluteTimeGetCurrent()
-    let weightFileURL = try await HubConfiguration.shared.snapshot(from: repoId, matching: [filename], progressHandler: progressHandler).appending(path: filename)
-    let snapshotTime = CFAbsoluteTimeGetCurrent() - snapshotStart
-    Log.model.debug("[Mimi] Weights file snapshot completed in \(snapshotTime, format: .fixed(precision: 2)) seconds")
-
-    Log.model.debug("[Mimi] Loading weight arrays from safetensors file...")
-    let loadStart = CFAbsoluteTimeGetCurrent()
+    let weightFileURL = directory.appending(path: filename)
     var weights = [String: MLXArray]()
     let w = try loadArrays(url: weightFileURL)
     for (key, value) in w {
       weights[key] = value
     }
-    let loadTime = CFAbsoluteTimeGetCurrent() - loadStart
-    Log.model.debug("[Mimi] Weight arrays loaded in \(loadTime, format: .fixed(precision: 2)) seconds. Total weights: \(weights.count)")
 
-    Log.model.debug("[Mimi] Sanitizing weights...")
-    let sanitizeStart = CFAbsoluteTimeGetCurrent()
     weights = model.sanitize(weights: weights)
-    let sanitizeTime = CFAbsoluteTimeGetCurrent() - sanitizeStart
-    Log.model.debug("[Mimi] Weights sanitized in \(sanitizeTime, format: .fixed(precision: 2)) seconds. Final weight count: \(weights.count)")
 
-    Log.model.debug("[Mimi] Processing codebook updates...")
-    let filterStart = CFAbsoluteTimeGetCurrent()
     func filterFn(_ module: Module, _ name: String, _: ModuleItem) -> Bool {
       if let codebook = module as? EuclideanCodebook, name == "initialized" {
         codebook.updateInPlace()
@@ -282,24 +260,25 @@ extension Mimi {
       return true
     }
     _ = model.filterMap(filter: filterFn)
-    let filterTime = CFAbsoluteTimeGetCurrent() - filterStart
-    Log.model.debug("[Mimi] Codebook processing completed in \(filterTime, format: .fixed(precision: 2)) seconds")
 
-    Log.model.debug("[Mimi] Updating model parameters...")
-    let updateStart = CFAbsoluteTimeGetCurrent()
     let parameters = ModuleParameters.unflattened(weights)
     try model.update(parameters: parameters, verify: [.all])
-    let updateTime = CFAbsoluteTimeGetCurrent() - updateStart
-    Log.model.debug("[Mimi] Model parameters updated in \(updateTime, format: .fixed(precision: 2)) seconds")
-
-    Log.model.debug("[Mimi] Evaluating model...")
-    let evalStart = CFAbsoluteTimeGetCurrent()
     eval(model)
-    let evalTime = CFAbsoluteTimeGetCurrent() - evalStart
-    Log.model.debug("[Mimi] Model evaluation completed in \(evalTime, format: .fixed(precision: 2)) seconds")
 
     Log.model.info("[Mimi] Mimi model loading completed successfully")
     return model
+  }
+
+  /// Download and load Mimi model
+  static func fromPretrained(id: String = "kyutai/moshiko-pytorch-bf16", filename: String = "tokenizer-e351c8d8-checkpoint125.safetensors", from downloader: any Downloader, progressHandler: @escaping @Sendable (Progress) -> Void) async throws -> Mimi {
+    Log.model.info("[Mimi] Starting Mimi model loading from \(id)")
+
+    let snapshotStart = CFAbsoluteTimeGetCurrent()
+    let directory = try await downloader.download(id: id, revision: nil, matching: [filename], useLatest: false, progressHandler: progressHandler)
+    let snapshotTime = CFAbsoluteTimeGetCurrent() - snapshotStart
+    Log.model.debug("[Mimi] Weights file snapshot completed in \(snapshotTime, format: .fixed(precision: 2)) seconds")
+
+    return try fromPretrained(from: directory, filename: filename)
   }
 
   private func sanitize(weights: [String: MLXArray]) -> [String: MLXArray] {

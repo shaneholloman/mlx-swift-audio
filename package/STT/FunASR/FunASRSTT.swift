@@ -23,30 +23,48 @@ actor FunASRSTT {
     self.tokenizer = tokenizer
   }
 
-  /// Load FunASRSTT from HuggingFace Hub
-  ///
-  /// - Parameters:
-  ///   - variant: Model variant to load
-  ///   - progressHandler: Optional callback for download/load progress
-  /// - Returns: Initialized FunASRSTT instance
+  /// Load FunASRSTT from a local directory
   static func load(
+    from directory: URL,
     variant: FunASRModelVariant = .nano4bit,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+    using tokenizerLoader: any TokenizerLoader
   ) async throws -> FunASRSTT {
-    // Load model
-    let model = try await FunASRModel.load(
-      variant: variant,
-      progressHandler: progressHandler
-    )
+    let model = try FunASRModel.load(from: directory, variant: variant)
 
-    // Load tokenizer from model directory
     guard let modelDirectory = model.modelDirectory else {
       throw STTError.modelUnavailable("Model directory not set after loading")
     }
 
     let tokenizer = try await FunASRTokenizer.load(
       from: modelDirectory,
-      config: model.config
+      config: model.config,
+      using: tokenizerLoader
+    )
+
+    return FunASRSTT(model: model, tokenizer: tokenizer)
+  }
+
+  /// Download and load FunASRSTT
+  static func load(
+    variant: FunASRModelVariant = .nano4bit,
+    from downloader: any Downloader,
+    using tokenizerLoader: any TokenizerLoader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+  ) async throws -> FunASRSTT {
+    let model = try await FunASRModel.load(
+      variant: variant,
+      from: downloader,
+      progressHandler: progressHandler
+    )
+
+    guard let modelDirectory = model.modelDirectory else {
+      throw STTError.modelUnavailable("Model directory not set after loading")
+    }
+
+    let tokenizer = try await FunASRTokenizer.load(
+      from: modelDirectory,
+      config: model.config,
+      using: tokenizerLoader
     )
 
     return FunASRSTT(model: model, tokenizer: tokenizer)

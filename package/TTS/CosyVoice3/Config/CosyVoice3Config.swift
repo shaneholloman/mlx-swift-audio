@@ -438,7 +438,7 @@ public enum CosyVoice3Constants {
   /// Token to mel ratio (mel_len = token_len * 2)
   public static let tokenMelRatio: Int = 2
 
-  /// Default HuggingFace repository ID for CosyVoice3
+  /// Default repository ID for CosyVoice3
   public static let defaultRepoId = "mlx-community/Fun-CosyVoice3-0.5B-2512-4bit"
 }
 

@@ -6,6 +6,9 @@
 import AVFoundation
 import Foundation
 import MLX
+import MLXLMCommon
+import MLXLMHFAPI
+import MLXLMTokenizers
 
 /// Fun-ASR STT engine - LLM-based multilingual speech recognition
 ///
@@ -29,16 +32,31 @@ public final class FunASREngine: STTEngine {
   // MARK: - Private Properties
 
   @ObservationIgnored private var funASRSTT: FunASRSTT?
+  @ObservationIgnored private let downloader: any Downloader
+  @ObservationIgnored private let tokenizerLoader: any TokenizerLoader
 
   // MARK: - Initialization
 
-  public init(variant: FunASRModelVariant = .nano4bit) {
+  public init(
+    variant: FunASRModelVariant = .nano4bit,
+    from downloader: any Downloader = HubClient.default,
+    using tokenizerLoader: any TokenizerLoader = TokenizersLoader()
+  ) {
     self.variant = variant
+    self.downloader = downloader
+    self.tokenizerLoader = tokenizerLoader
     Log.model.debug("FunASREngine initialized with variant: \(variant.repoId)")
   }
 
-  public init(modelType: FunASRModelType = .nano, quantization: FunASRQuantization = .q4) {
+  public init(
+    modelType: FunASRModelType = .nano,
+    quantization: FunASRQuantization = .q4,
+    from downloader: any Downloader = HubClient.default,
+    using tokenizerLoader: any TokenizerLoader = TokenizersLoader()
+  ) {
     variant = FunASRModelVariant(modelType: modelType, quantization: quantization)
+    self.downloader = downloader
+    self.tokenizerLoader = tokenizerLoader
     let repoId = variant.repoId
     Log.model.debug("FunASREngine initialized with variant: \(repoId)")
   }
@@ -56,6 +74,8 @@ public final class FunASREngine: STTEngine {
 
     funASRSTT = try await FunASRSTT.load(
       variant: variant,
+      from: downloader,
+      using: tokenizerLoader,
       progressHandler: progressHandler ?? { _ in }
     )
 

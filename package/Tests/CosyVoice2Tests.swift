@@ -2,8 +2,9 @@
 
 import AVFoundation
 import Foundation
-import Hub
 import MLX
+import MLXLMHFAPI
+import MLXLMTokenizers
 import MLXNN
 import Testing
 
@@ -13,10 +14,10 @@ import Testing
 
 @Suite(.serialized)
 struct CosyVoice2IntegrationTests {
-  /// HuggingFace repo ID for 4-bit model
+  /// Repo ID for 4-bit model
   static let modelRepoId = "mlx-community/CosyVoice2-0.5B-4bit"
 
-  /// HuggingFace repo ID for S3 tokenizer
+  /// Repo ID for S3 tokenizer
   static let s3TokenizerRepoId = "mlx-community/S3TokenizerV2"
 
   /// Reference audio from LJ Speech dataset (public domain)
@@ -29,9 +30,15 @@ struct CosyVoice2IntegrationTests {
   /// Output directory for generated audio
   static let outputDir = FileManager.default.temporaryDirectory.appendingPathComponent("cosyvoice2-test")
 
-  /// Load S3TokenizerV2 from HuggingFace
+  /// Download and load S3TokenizerV2
   static func loadS3Tokenizer() async throws -> S3TokenizerV2 {
-    let modelDirectory = try await HubConfiguration.shared.snapshot(from: s3TokenizerRepoId)
+    let modelDirectory = try await HubClient.default.download(
+      id: s3TokenizerRepoId,
+      revision: nil,
+      matching: ["*.safetensors"],
+      useLatest: false,
+      progressHandler: { _ in }
+    )
     let weightURL = modelDirectory.appendingPathComponent("model.safetensors")
     let weights = try MLX.loadArrays(url: weightURL)
 
@@ -157,7 +164,11 @@ struct CosyVoice2IntegrationTests {
     print("Step 1: Loading models...")
 
     let ttsStart = CFAbsoluteTimeGetCurrent()
-    let tts = try await CosyVoice2TTS.load(repoId: Self.modelRepoId)
+    let tts = try await CosyVoice2TTS.load(
+      id: Self.modelRepoId,
+      from: HubClient.default,
+      using: TokenizersLoader()
+    )
     print("  CosyVoice2 loaded in \(String(format: "%.2f", CFAbsoluteTimeGetCurrent() - ttsStart))s")
 
     let s3Start = CFAbsoluteTimeGetCurrent()

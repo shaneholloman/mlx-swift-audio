@@ -5,6 +5,8 @@
 // License: licenses/orpheus.txt
 
 import Foundation
+import MLXLMCommon
+import MLXLMHFAPI
 
 /// Orpheus TTS engine - high quality with emotional expressions
 ///
@@ -60,10 +62,12 @@ public final class OrpheusEngine: TTSEngine {
 
   @ObservationIgnored private var orpheusTTS: OrpheusTTS?
   @ObservationIgnored private let playback = TTSPlaybackController(sampleRate: TTSProvider.orpheus.sampleRate)
+  @ObservationIgnored private let downloader: any Downloader
 
   // MARK: - Initialization
 
-  public init() {
+  public init(from downloader: any Downloader = HubClient.default) {
+    self.downloader = downloader
     Log.tts.debug("OrpheusEngine initialized")
   }
 
@@ -79,6 +83,7 @@ public final class OrpheusEngine: TTSEngine {
 
     do {
       orpheusTTS = try await OrpheusTTS.load(
+        from: downloader,
         progressHandler: progressHandler ?? { _ in },
       )
 

@@ -5,8 +5,8 @@
 // License: licenses/orpheus.txt
 
 import Foundation
-import Hub
 import MLX
+import MLXLMCommon
 
 class OrpheusTokenizer {
   private let tokenizerConfig: [String: Any]
@@ -47,20 +47,30 @@ class OrpheusTokenizer {
     return pairs
   }
 
-  /// Downloads tokenizer files from Hugging Face Hub (cached locally after first download)
+  /// Get tokenizer file URLs from a local directory
+  static func tokenizerURLs(
+    from directory: URL
+  ) -> (tokenizerURL: URL, configURL: URL) {
+    (
+      directory.appending(path: "tokenizer.json"),
+      directory.appending(path: "tokenizer_config.json"),
+    )
+  }
+
+  /// Downloads tokenizer files and returns their URLs
   static func download(
-    repoId: String = defaultRepoId,
-    progressHandler: @escaping (Progress) -> Void = { _ in },
+    id: String = defaultRepoId,
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
   ) async throws -> (tokenizerURL: URL, configURL: URL) {
-    let modelDirectoryURL = try await HubConfiguration.shared.snapshot(
-      from: repoId,
+    let modelDirectoryURL = try await downloader.download(
+      id: id,
+      revision: nil,
       matching: ["tokenizer.json", "tokenizer_config.json"],
+      useLatest: false,
       progressHandler: progressHandler
     )
-    return (
-      modelDirectoryURL.appending(path: "tokenizer.json"),
-      modelDirectoryURL.appending(path: "tokenizer_config.json"),
-    )
+    return tokenizerURLs(from: modelDirectoryURL)
   }
 
   /// Initialize tokenizer from downloaded file URLs

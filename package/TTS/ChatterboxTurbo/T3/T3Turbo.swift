@@ -9,7 +9,6 @@ import Foundation
 import MLX
 import MLXLMCommon
 import MLXNN
-import MLXRandom
 
 // MARK: - T3 Turbo Config
 

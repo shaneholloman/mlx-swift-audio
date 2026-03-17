@@ -6,6 +6,8 @@
 import AVFoundation
 import Foundation
 import MLX
+import MLXLMCommon
+import MLXLMHFAPI
 
 /// Whisper STT engine - multilingual speech recognition
 ///
@@ -31,12 +33,18 @@ public final class WhisperEngine: STTEngine {
   // MARK: - Private Properties
 
   @ObservationIgnored private var whisperSTT: WhisperSTT?
+  @ObservationIgnored private let downloader: any Downloader
 
   // MARK: - Initialization
 
-  public init(modelSize: WhisperModelSize = .base, quantization: WhisperQuantization = .q4) {
+  public init(
+    modelSize: WhisperModelSize = .base,
+    quantization: WhisperQuantization = .q4,
+    from downloader: any Downloader = HubClient.default
+  ) {
     self.modelSize = modelSize
     self.quantization = quantization
+    self.downloader = downloader
     Log.tts.debug("WhisperEngine initialized with model: \(modelSize.rawValue), quantization: \(quantization.rawValue)")
   }
 
@@ -55,6 +63,7 @@ public final class WhisperEngine: STTEngine {
     whisperSTT = try await WhisperSTT.load(
       modelSize: modelSize,
       quantization: quantization,
+      from: downloader,
       progressHandler: progressHandler ?? { _ in }
     )
 

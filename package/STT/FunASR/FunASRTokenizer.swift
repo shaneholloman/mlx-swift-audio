@@ -4,14 +4,14 @@
 // License: licenses/funasr.txt
 
 import Foundation
-import Tokenizers
+import MLXLMCommon
 
 /// Fun-ASR tokenizer wrapper for Qwen3
 ///
-/// Uses swift-transformers AutoTokenizer for Qwen3 tokenization.
+/// Uses a TokenizerLoader for Qwen3 tokenization.
 /// Tracks special token IDs for speech recognition prompts.
 class FunASRTokenizer {
-  private let tokenizer: Tokenizer
+  private let tokenizer: any MLXLMCommon.Tokenizer
 
   // Special token IDs
   let sosTokenId: Int?
@@ -23,7 +23,7 @@ class FunASRTokenizer {
   // Configuration
   let config: FunASRConfig
 
-  private init(tokenizer: Tokenizer, config: FunASRConfig) {
+  private init(tokenizer: any MLXLMCommon.Tokenizer, config: FunASRConfig) {
     self.tokenizer = tokenizer
     self.config = config
 
@@ -57,7 +57,7 @@ class FunASRTokenizer {
   ///
   /// Takes the first token ID from encoding, similar to Python's approach.
   /// This handles both single-token and multi-token encodings.
-  private static func resolveTokenId(tokenizer: Tokenizer, token: String) -> Int? {
+  private static func resolveTokenId(tokenizer: any MLXLMCommon.Tokenizer, token: String) -> Int? {
     let encoded = tokenizer.encode(text: token)
     // Take the first token ID if available
     return encoded.first
@@ -69,20 +69,11 @@ class FunASRTokenizer {
   ///   - modelDirectory: Path to model directory containing tokenizer files
   ///   - config: Fun-ASR configuration
   /// - Returns: Initialized tokenizer
-  static func load(from modelDirectory: URL, config: FunASRConfig) async throws -> FunASRTokenizer {
+  static func load(
+    from directory: URL, config: FunASRConfig, using tokenizerLoader: any TokenizerLoader
+  ) async throws -> FunASRTokenizer {
     // Load tokenizer from the model directory
-    let tokenizer = try await AutoTokenizer.from(modelFolder: modelDirectory)
-    return FunASRTokenizer(tokenizer: tokenizer, config: config)
-  }
-
-  /// Load tokenizer from HuggingFace Hub
-  ///
-  /// - Parameters:
-  ///   - repoId: HuggingFace repository ID
-  ///   - config: Fun-ASR configuration
-  /// - Returns: Initialized tokenizer
-  static func load(from repoId: String, config: FunASRConfig) async throws -> FunASRTokenizer {
-    let tokenizer = try await AutoTokenizer.from(pretrained: repoId)
+    let tokenizer = try await tokenizerLoader.load(from: directory)
     return FunASRTokenizer(tokenizer: tokenizer, config: config)
   }
 
@@ -99,7 +90,7 @@ class FunASRTokenizer {
   /// - Parameter tokens: Array of token IDs
   /// - Returns: Decoded text
   func decode(_ tokens: [Int]) -> String {
-    tokenizer.decode(tokens: tokens)
+    tokenizer.decode(tokenIds: tokens)
   }
 
   /// Check if a token ID is an EOS token

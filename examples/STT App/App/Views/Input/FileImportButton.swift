@@ -33,7 +33,7 @@ struct FileImportButton: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
+        .glassEffect(.regular, in: .rect(cornerRadius: 12))
       }
       .buttonStyle(.plain)
       .fileImporter(

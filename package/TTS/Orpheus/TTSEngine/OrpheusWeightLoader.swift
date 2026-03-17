@@ -5,8 +5,8 @@
 // License: licenses/orpheus.txt
 
 import Foundation
-import Hub
 import MLX
+import MLXLMCommon
 import MLXNN
 
 /// Quantization configuration from Orpheus config.json
@@ -31,24 +31,17 @@ class OrpheusWeightLoader {
   static let defaultRepoId = "mlx-community/orpheus-3b-0.1-ft-4bit"
   static let defaultWeightsFilename = "model.safetensors"
 
-  /// Load weights and quantization config in a single snapshot call
+  /// Load weights and quantization config from a local directory
   static func load(
-    repoId: String = defaultRepoId,
-    filename: String = defaultWeightsFilename,
-    progressHandler: @escaping (Progress) -> Void = { _ in }
-  ) async throws -> (weights: [String: MLXArray], quantization: OrpheusQuantizationConfig?) {
-    let modelDirectoryURL = try await HubConfiguration.shared.snapshot(
-      from: repoId,
-      matching: [filename, "config.json"],
-      progressHandler: progressHandler
-    )
-
+    from directory: URL,
+    filename: String = defaultWeightsFilename
+  ) throws -> (weights: [String: MLXArray], quantization: OrpheusQuantizationConfig?) {
     // Load weights
-    let weightFileURL = modelDirectoryURL.appending(path: filename)
+    let weightFileURL = directory.appending(path: filename)
     let weights = try MLX.loadArrays(url: weightFileURL)
 
     // Load quantization config
-    let configURL = modelDirectoryURL.appending(path: "config.json")
+    let configURL = directory.appending(path: "config.json")
     var quantization: OrpheusQuantizationConfig?
     if let data = try? Data(contentsOf: configURL),
        let config = try? JSONDecoder().decode(OrpheusPartialConfig.self, from: data)
@@ -57,5 +50,23 @@ class OrpheusWeightLoader {
     }
 
     return (weights, quantization)
+  }
+
+  /// Download and load weights and quantization config
+  static func load(
+    id: String = defaultRepoId,
+    filename: String = defaultWeightsFilename,
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+  ) async throws -> (weights: [String: MLXArray], quantization: OrpheusQuantizationConfig?) {
+    let modelDirectoryURL = try await downloader.download(
+      id: id,
+      revision: nil,
+      matching: [filename, "config.json"],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+
+    return try load(from: modelDirectoryURL, filename: filename)
   }
 }

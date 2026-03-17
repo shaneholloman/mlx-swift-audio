@@ -223,18 +223,18 @@ public enum WhisperModelSize: String, Sendable, CaseIterable {
     true
   }
 
-  /// HuggingFace repository ID with specified quantization
+  /// Repository ID with specified quantization
   ///
   /// All models use mlx-community repos, converted using mlx-audio-plus
   /// with proper safetensors format.
   ///
   /// - Parameter quantization: The quantization level (default: q4)
-  /// - Returns: The HuggingFace repository ID
+  /// - Returns: The repository ID
   public func repoId(quantization: WhisperQuantization = .q4) -> String {
     "mlx-community/\(rawValue)-\(quantization.rawValue)"
   }
 
-  /// HuggingFace repository ID (fp16 precision)
+  /// Repository ID (fp16 precision)
   ///
   /// Convenience property that returns the fp16 variant.
   /// Use `repoId(quantization:)` for other quantization levels.

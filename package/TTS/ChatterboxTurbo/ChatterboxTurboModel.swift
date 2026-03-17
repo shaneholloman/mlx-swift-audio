@@ -6,11 +6,9 @@
 // Chatterbox Turbo TTS - Fast distilled text-to-speech model
 
 import Foundation
-import Hub
 import MLX
 import MLXLMCommon
 import MLXNN
-import Tokenizers
 
 // MARK: - Constants
 
@@ -89,13 +87,13 @@ struct ChatterboxTurboConditionals: @unchecked Sendable {
 /// - 2-step meanflow CFM (instead of 10-step)
 /// - No CFG, exaggeration, or min_p support
 class ChatterboxTurboModel: Module {
-  /// Base Hugging Face repository name
+  /// Base repository name
   private static let baseRepoName = "Chatterbox-Turbo-TTS"
 
-  /// Hugging Face repository for S3TokenizerV2
+  /// Repository ID for S3TokenizerV2
   static let s3TokenizerRepoId = "mlx-community/S3TokenizerV2"
 
-  /// Get Hugging Face repository ID for specified quantization
+  /// Get repository ID for specified quantization
   static func repoId(quantization: ChatterboxTurboQuantization = .q4) -> String {
     "mlx-community/\(baseRepoName)-\(quantization.rawValue)"
   }
@@ -126,8 +124,8 @@ class ChatterboxTurboModel: Module {
   /// S3 tokenizer (speech tokenization) - loaded separately
   var s3Tokenizer: S3TokenizerV2?
 
-  /// Text tokenizer (GPT-2 BPE from Hugging Face)
-  var textTokenizer: Tokenizer?
+  /// Text tokenizer (GPT-2 BPE)
+  var textTokenizer: (any MLXLMCommon.Tokenizer)?
 
   /// Pre-computed conditionals
   var conds: ChatterboxTurboConditionals?
@@ -146,8 +144,8 @@ class ChatterboxTurboModel: Module {
   // MARK: - Text Tokenizer
 
   /// Load text tokenizer from model directory
-  func loadTextTokenizer(modelDirectory: URL) async throws {
-    textTokenizer = try await AutoTokenizer.from(modelFolder: modelDirectory)
+  func loadTextTokenizer(from directory: URL, using tokenizerLoader: any TokenizerLoader) async throws {
+    textTokenizer = try await tokenizerLoader.load(from: directory)
   }
 
   // MARK: - Weight Loading
@@ -210,33 +208,15 @@ class ChatterboxTurboModel: Module {
     return sanitized
   }
 
-  /// Load ChatterboxTurbo model from Hugging Face Hub
+  /// Load ChatterboxTurbo model from local directories
   static func load(
-    quantization: ChatterboxTurboQuantization = .q4,
-    s3TokenizerRepoId: String = s3TokenizerRepoId,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+    from directory: URL,
+    s3TokenizerDirectory: URL,
+    using tokenizerLoader: any TokenizerLoader,
+    quantization: ChatterboxTurboQuantization = .q4
   ) async throws -> ChatterboxTurboModel {
-    let repoId = repoId(quantization: quantization)
-
-    Log.model.info("Loading ChatterboxTurbo (\(quantization.rawValue)) from \(repoId)...")
-
-    // Download model and S3Tokenizer
-    async let modelDirectoryTask = HubConfiguration.shared.snapshot(
-      from: repoId,
-      matching: ["model.safetensors", "tokenizer.json", "tokenizer_config.json", "config.json", "conds.safetensors"],
-      progressHandler: progressHandler
-    )
-
-    async let s3TokenizerDirectoryTask = HubConfiguration.shared.snapshot(
-      from: s3TokenizerRepoId,
-      matching: ["model.safetensors", "config.json"],
-      progressHandler: progressHandler
-    )
-
-    let (modelDirectory, s3TokenizerDirectory) = try await (modelDirectoryTask, s3TokenizerDirectoryTask)
-
     // Load and sanitize weights
-    let weightFileURL = modelDirectory.appending(path: "model.safetensors")
+    let weightFileURL = directory.appending(path: "model.safetensors")
     let rawWeights = try MLX.loadArrays(url: weightFileURL)
     let weights = sanitizeWeights(rawWeights)
 
@@ -269,10 +249,10 @@ class ChatterboxTurboModel: Module {
     eval(model)
 
     // Load text tokenizer
-    try await model.loadTextTokenizer(modelDirectory: modelDirectory)
+    try await model.loadTextTokenizer(from: directory, using: tokenizerLoader)
 
     // Load pre-computed conditionals if available
-    let condsPath = modelDirectory.appending(path: "conds.safetensors")
+    let condsPath = directory.appending(path: "conds.safetensors")
     if FileManager.default.fileExists(atPath: condsPath.path) {
       let condsData = try MLX.loadArrays(url: condsPath)
 
@@ -291,7 +271,6 @@ class ChatterboxTurboModel: Module {
         }
       }
 
-      // Create CBTRefDict from loaded data
       let s3GenRef = CBTRefDict(
         promptToken: genDict["prompt_token"] ?? MLXArray.zeros([1, 0]),
         promptTokenLen: genDict["prompt_token_len"] ?? MLXArray([Int32(0)]),
@@ -306,6 +285,39 @@ class ChatterboxTurboModel: Module {
 
     Log.model.info("ChatterboxTurbo model loaded successfully")
     return model
+  }
+
+  /// Download and load ChatterboxTurbo model
+  static func load(
+    quantization: ChatterboxTurboQuantization = .q4,
+    s3TokenizerRepoId: String = s3TokenizerRepoId,
+    from downloader: any Downloader,
+    using tokenizerLoader: any TokenizerLoader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+  ) async throws -> ChatterboxTurboModel {
+    let repoId = repoId(quantization: quantization)
+
+    Log.model.info("Loading ChatterboxTurbo (\(quantization.rawValue)) from \(repoId)...")
+
+    async let modelDirectoryTask = downloader.download(
+      id: repoId,
+      revision: nil,
+      matching: ["model.safetensors", "tokenizer.json", "tokenizer_config.json", "config.json", "conds.safetensors"],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+
+    async let s3TokenizerDirectoryTask = downloader.download(
+      id: s3TokenizerRepoId,
+      revision: nil,
+      matching: ["model.safetensors", "config.json"],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+
+    let (modelDirectory, s3TokenizerDirectory) = try await (modelDirectoryTask, s3TokenizerDirectoryTask)
+
+    return try await load(from: modelDirectory, s3TokenizerDirectory: s3TokenizerDirectory, using: tokenizerLoader, quantization: quantization)
   }
 
   // MARK: - Conditioning

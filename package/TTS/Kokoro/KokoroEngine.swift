@@ -6,7 +6,10 @@
 
 import AVFoundation
 import Foundation
+import MLX
 import MLXAudio
+import MLXLMCommon
+import MLXLMHFAPI
 
 /// Kokoro TTS engine - fast, lightweight TTS with many voice options
 @Observable
@@ -117,10 +120,13 @@ public final class KokoroEngine: TTSEngine {
 
   @ObservationIgnored private var kokoroTTS: KokoroTTS?
   @ObservationIgnored private let playback = TTSPlaybackController(sampleRate: TTSProvider.kokoro.sampleRate)
+  @ObservationIgnored private let downloader: any Downloader
+  @ObservationIgnored private var cachedVoice: (voice: Voice, data: MLXArray)?
 
   // MARK: - Initialization
 
-  public init() {
+  public init(from downloader: any Downloader = HubClient.default) {
+    self.downloader = downloader
     Log.tts.debug("KokoroEngine initialized")
   }
 
@@ -135,10 +141,14 @@ public final class KokoroEngine: TTSEngine {
     Log.model.info("Loading Kokoro TTS model...")
 
     do {
-      kokoroTTS = try await KokoroTTS.load(
-        repoId: KokoroWeightLoader.defaultRepoId,
-        progressHandler: progressHandler ?? { _ in },
+      let directory = try await downloader.download(
+        id: KokoroWeightLoader.defaultRepoId,
+        revision: nil,
+        matching: [KokoroWeightLoader.defaultWeightsFilename],
+        useLatest: false,
+        progressHandler: progressHandler ?? { _ in }
       )
+      kokoroTTS = try await KokoroTTS.load(from: directory)
 
       isLoaded = true
       Log.model.info("Kokoro TTS model loaded successfully")
@@ -171,6 +181,31 @@ public final class KokoroEngine: TTSEngine {
 
   public func play(_ audio: AudioResult) async {
     await playback.play(audio, setPlaying: { self.isPlaying = $0 })
+  }
+
+  // MARK: - Voice Loading
+
+  /// Load and cache a voice, returning the voice data array.
+  private func loadVoiceData(for voice: Voice) async throws -> MLXArray {
+    if let cached = cachedVoice, cached.voice == voice {
+      return cached.data
+    }
+
+    guard let kokoroTTS else {
+      throw TTSError.modelNotLoaded
+    }
+
+    let voiceData = try await VoiceLoader.loadVoice(
+      voice,
+      id: KokoroWeightLoader.defaultRepoId,
+      from: downloader
+    )
+    voiceData.eval()
+
+    try await kokoroTTS.setLanguage(for: voice)
+
+    cachedVoice = (voice, voiceData)
+    return voiceData
   }
 
   // MARK: - Generation
@@ -252,10 +287,13 @@ public final class KokoroEngine: TTSEngine {
         throw TTSError.modelNotLoaded
       }
 
+      // Load voice data (cached if same voice)
+      nonisolated(unsafe) let voiceData = try await loadVoiceData(for: voice)
+
       // Wrap model stream to convert [Float] -> AudioChunk
       let modelStream = try await kokoroTTS.generateStreaming(
         text: trimmedText,
-        voice: voice,
+        voiceData: voiceData,
         speed: speed,
       )
 

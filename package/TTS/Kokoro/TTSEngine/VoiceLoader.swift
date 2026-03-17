@@ -5,40 +5,52 @@
 // License: licenses/kokoro.txt
 
 import Foundation
-import Hub
 import MLX
 import MLXAudio
+import MLXLMCommon
 
-// Utility class for loading voices from Hugging Face Hub.
+// Utility class for loading voices.
 // Voice files are downloaded as safetensors and cached on disk automatically.
 class VoiceLoader {
   private init() {}
 
-  // Hugging Face repo configuration
+  // Repo configuration
   static let defaultRepoId = "mlx-community/Kokoro-82M-bf16"
 
   static var availableVoices: [KokoroEngine.Voice] {
     KokoroEngine.Voice.allCases
   }
 
-  /// Load a voice from Hugging Face Hub (safetensors).
-  /// Files are cached locally by HubConfiguration.shared to avoid re-downloading.
+  /// Load a voice from a local directory
   static func loadVoice(
     _ voice: KokoroEngine.Voice,
-    repoId: String = defaultRepoId,
-    progressHandler: @escaping (Progress) -> Void = { _ in },
+    from directory: URL
+  ) throws -> MLXArray {
+    let voiceId = voice.identifier
+    let filename = "voices/\(voiceId).safetensors"
+    let voiceFileURL = directory.appending(path: filename)
+    return try loadVoiceFromFile(voiceFileURL)
+  }
+
+  /// Download and load a voice
+  static func loadVoice(
+    _ voice: KokoroEngine.Voice,
+    id: String = defaultRepoId,
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
   ) async throws -> MLXArray {
     let voiceId = voice.identifier
     let filename = "voices/\(voiceId).safetensors"
 
-    let modelDirectoryURL = try await HubConfiguration.shared.snapshot(
-      from: repoId,
+    let modelDirectoryURL = try await downloader.download(
+      id: id,
+      revision: nil,
       matching: [filename],
+      useLatest: false,
       progressHandler: progressHandler
     )
 
-    let voiceFileURL = modelDirectoryURL.appending(path: filename)
-    return try loadVoiceFromFile(voiceFileURL)
+    return try loadVoice(voice, from: modelDirectoryURL)
   }
 
   /// Load voice array from a local safetensors file

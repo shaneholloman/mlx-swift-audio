@@ -4,7 +4,6 @@
 // License: licenses/whisper.txt
 
 import Foundation
-import Hub
 import MLX
 import MLXLMCommon
 import MLXNN
@@ -134,52 +133,26 @@ class WhisperModel: Module {
     alignmentHeads = heads
   }
 
-  /// Load Whisper model from Hugging Face Hub
+  /// Load Whisper model from a local directory
   ///
   /// - Parameters:
   ///   - modelSize: Model size (tiny, base, small, medium, large, largeTurbo)
   ///   - quantization: Quantization level (fp16, 8bit, 4bit). Default is 4bit.
   ///   - progressHandler: Optional callback for download progress
   /// - Returns: Initialized WhisperModel with loaded weights
+  /// Load Whisper model from a local directory
   static func load(
-    modelSize: WhisperModelSize,
-    quantization: WhisperQuantization = .q4,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
-  ) async throws -> WhisperModel {
-    // Validate model is available (has safetensors weights)
-    guard modelSize.isAvailable else {
-      throw STTError.modelUnavailable(
-        "Model '\(modelSize.rawValue)' requires .npz format which MLX Swift doesn't support. Available models: tiny, base, large-v3-turbo"
-      )
-    }
-
-    let repoId = modelSize.repoId(quantization: quantization)
-    Log.model.info("Loading Whisper from \(repoId)...")
-
-    // Download model files from Hugging Face
-    // All mlx-community Whisper models use:
-    // - model.safetensors: Model weights
-    // - config.json: Model configuration
-    // - multilingual.tiktoken or gpt2.tiktoken: Tokenizer vocabulary
-    let modelDirectory = try await HubConfiguration.shared.snapshot(
-      from: repoId,
-      matching: [
-        "model.safetensors",
-        "config.json",
-        "multilingual.tiktoken",
-        "gpt2.tiktoken",
-      ],
-      progressHandler: progressHandler
-    )
-
+    from directory: URL,
+    quantization: WhisperQuantization = .q4
+  ) throws -> WhisperModel {
     // Load config to get model dimensions
-    let configURL = modelDirectory.appending(path: "config.json")
+    let configURL = directory.appending(path: "config.json")
     let dims = try ModelDimensions.load(from: configURL)
 
     // Load weights from model.safetensors
-    let modelSafetensors = modelDirectory.appending(path: "model.safetensors")
+    let modelSafetensors = directory.appending(path: "model.safetensors")
     guard FileManager.default.fileExists(atPath: modelSafetensors.path) else {
-      throw STTError.modelUnavailable("model.safetensors not found in \(repoId)")
+      throw STTError.modelUnavailable("model.safetensors not found in \(directory.path)")
     }
     let weights = try MLX.loadArrays(url: modelSafetensors)
 
@@ -206,11 +179,45 @@ class WhisperModel: Module {
     eval(model)
 
     // Store model directory for tokenizer to find vocab files
-    model.modelDirectory = modelDirectory
+    model.modelDirectory = directory
 
-    Log.model.info("Whisper \(modelSize.rawValue) model loaded successfully")
+    Log.model.info("Whisper model loaded successfully")
 
     return model
+  }
+
+  /// Download and load Whisper model
+  static func load(
+    modelSize: WhisperModelSize,
+    quantization: WhisperQuantization = .q4,
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+  ) async throws -> WhisperModel {
+    // Validate model is available (has safetensors weights)
+    guard modelSize.isAvailable else {
+      throw STTError.modelUnavailable(
+        "Model '\(modelSize.rawValue)' requires .npz format which MLX Swift doesn't support. Available models: tiny, base, large-v3-turbo"
+      )
+    }
+
+    let repoId = modelSize.repoId(quantization: quantization)
+    Log.model.info("Loading Whisper from \(repoId)...")
+
+    // Download model files
+    let modelDirectory = try await downloader.download(
+      id: repoId,
+      revision: nil,
+      matching: [
+        "model.safetensors",
+        "config.json",
+        "multilingual.tiktoken",
+        "gpt2.tiktoken",
+      ],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+
+    return try load(from: modelDirectory, quantization: quantization)
   }
 
   /// Detect the spoken language in the audio

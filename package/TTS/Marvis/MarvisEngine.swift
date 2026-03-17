@@ -7,6 +7,9 @@
 
 import Foundation
 import MLX
+import MLXLMCommon
+import MLXLMHFAPI
+import MLXLMTokenizers
 
 /// Marvis TTS engine - advanced conversational TTS with streaming support
 @Observable
@@ -95,10 +98,17 @@ public final class MarvisEngine: TTSEngine {
   @ObservationIgnored private var marvisTTS: MarvisTTS?
   @ObservationIgnored private let playback = TTSPlaybackController(sampleRate: TTSProvider.marvis.sampleRate)
   @ObservationIgnored private var lastModelVariant: ModelVariant?
+  @ObservationIgnored private let downloader: any Downloader
+  @ObservationIgnored private let tokenizerLoader: any TokenizerLoader
 
   // MARK: - Initialization
 
-  public init() {
+  public init(
+    from downloader: any Downloader = HubClient.default,
+    using tokenizerLoader: any TokenizerLoader = TokenizersLoader()
+  ) {
+    self.downloader = downloader
+    self.tokenizerLoader = tokenizerLoader
     Log.tts.debug("MarvisEngine initialized")
   }
 
@@ -119,7 +129,9 @@ public final class MarvisEngine: TTSEngine {
 
     do {
       marvisTTS = try await MarvisTTS.load(
-        repoId: modelVariant.repoId,
+        id: modelVariant.repoId,
+        from: downloader,
+        using: tokenizerLoader,
         progressHandler: progressHandler ?? { _ in },
       )
 

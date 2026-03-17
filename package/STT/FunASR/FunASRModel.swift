@@ -4,11 +4,9 @@
 // License: licenses/funasr.txt
 
 import Foundation
-import Hub
 import MLX
 import MLXLMCommon
 import MLXNN
-import MLXRandom
 
 /// Main Fun-ASR model combining audio encoder, adaptor, and LLM decoder
 class FunASRModel: Module {
@@ -232,40 +230,22 @@ class FunASRModel: Module {
     return sanitized
   }
 
-  /// Load Fun-ASR model from HuggingFace Hub
+  /// Load Fun-ASR model from a local directory
   ///
   /// - Parameters:
   ///   - variant: Model variant to load
   ///   - progressHandler: Optional callback for download progress
   /// - Returns: Initialized model with loaded weights
+  /// Load Fun-ASR model from a local directory
   static func load(
-    variant: FunASRModelVariant = .nano4bit,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
-  ) async throws -> FunASRModel {
-    let repoId = variant.repoId
-    Log.model.info("Loading Fun-ASR from \(repoId)...")
-
-    // Download model files from HuggingFace
-    let modelDirectory = try await HubConfiguration.shared.snapshot(
-      from: repoId,
-      matching: [
-        "*.safetensors",
-        "config.json",
-        "tokenizer.json",
-        "tokenizer_config.json",
-        "special_tokens_map.json",
-        "vocab.json",
-        "merges.txt",
-      ],
-      progressHandler: progressHandler
-    )
-
+    from directory: URL,
+    variant: FunASRModelVariant = .nano4bit
+  ) throws -> FunASRModel {
     // Load config
-    let configURL = modelDirectory.appending(path: "config.json")
+    let configURL = directory.appending(path: "config.json")
     let config: FunASRConfig = if FileManager.default.fileExists(atPath: configURL.path) {
       try FunASRConfig.load(from: configURL)
     } else {
-      // Use defaults
       FunASRConfig()
     }
 
@@ -274,12 +254,12 @@ class FunASRModel: Module {
 
     // Find and load weights
     let weightFiles = try FileManager.default.contentsOfDirectory(
-      at: modelDirectory,
+      at: directory,
       includingPropertiesForKeys: nil
     ).filter { $0.pathExtension == "safetensors" }
 
     guard !weightFiles.isEmpty else {
-      throw STTError.modelUnavailable("No safetensors files found in \(repoId)")
+      throw STTError.modelUnavailable("No safetensors files found in \(directory.path)")
     }
 
     var allWeights: [String: MLXArray] = [:]
@@ -311,10 +291,38 @@ class FunASRModel: Module {
     eval(model)
 
     // Store model directory for tokenizer
-    model.modelDirectory = modelDirectory
+    model.modelDirectory = directory
 
     Log.model.info("Fun-ASR model loaded successfully")
 
     return model
+  }
+
+  /// Download and load Fun-ASR model
+  static func load(
+    variant: FunASRModelVariant = .nano4bit,
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+  ) async throws -> FunASRModel {
+    let repoId = variant.repoId
+    Log.model.info("Loading Fun-ASR from \(repoId)...")
+
+    let modelDirectory = try await downloader.download(
+      id: repoId,
+      revision: nil,
+      matching: [
+        "*.safetensors",
+        "config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "special_tokens_map.json",
+        "vocab.json",
+        "merges.txt",
+      ],
+      useLatest: false,
+      progressHandler: progressHandler
+    )
+
+    return try load(from: modelDirectory, variant: variant)
   }
 }

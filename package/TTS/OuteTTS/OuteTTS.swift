@@ -4,13 +4,10 @@
 // License: licenses/outetts.txt
 
 import Foundation
-import Hub
 @preconcurrency import MLX
 @preconcurrency import MLXLMCommon
 @preconcurrency import MLXNN
-import MLXRandom
 import Synchronization
-import Tokenizers
 
 // MARK: - OuteTTS Configuration
 
@@ -95,29 +92,26 @@ actor OuteTTS {
     self.eosTokenId = eosTokenId
   }
 
-  /// Load and initialize an OuteTTS instance.
-  ///
-  /// - Parameters:
-  ///   - config: Configuration for the model
-  ///   - progressHandler: Callback for download progress
-  /// - Returns: A fully initialized OuteTTS actor
+  /// Load and initialize an OuteTTS instance from local directories.
   static func load(
     config: OuteTTSConfig = .default,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
+    from directory: URL,
+    dacDirectory: URL,
+    using tokenizerLoader: any TokenizerLoader
   ) async throws -> OuteTTS {
-    // Load model and tokenizer
+    // Load model and tokenizer from local directory
     let (model, tokenizer) = try await loadOuteTTSModel(
-      modelId: config.modelId,
-      progressHandler: progressHandler,
+      from: directory,
+      using: tokenizerLoader,
     )
 
     // Get EOS token ID from tokenizer
     let eosTokenId = tokenizer.convertTokenToId("<|im_end|>") ?? 151_645
 
-    // Load audio processor with codec
-    let audioProcessor = try await OuteTTSAudioProcessor.create(
+    // Load audio processor with codec from local directory
+    let audioProcessor = try OuteTTSAudioProcessor.create(
       sampleRate: config.sampleRate,
-      progressHandler: progressHandler,
+      from: dacDirectory,
     )
 
     // buildTokenMaps caches special token IDs for fast prompt building
@@ -145,22 +139,48 @@ actor OuteTTS {
     )
   }
 
-  // MARK: - Model Loading
-
-  private static func loadOuteTTSModel(
-    modelId: String,
-    progressHandler: @escaping @Sendable (Progress) -> Void,
-  ) async throws -> (OuteTTSLMHeadModel, any Tokenizer) {
-    // Download model files using MLXLMCommon's download helper
-    let configuration = ModelConfiguration(id: modelId, extraEOSTokens: ["<|im_end|>"])
-    let modelDirectory = try await downloadModel(
-      hub: HubApi.shared,
-      configuration: configuration,
+  /// Download and load an OuteTTS instance.
+  static func load(
+    config: OuteTTSConfig = .default,
+    from downloader: any Downloader,
+    using tokenizerLoader: any TokenizerLoader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
+  ) async throws -> OuteTTS {
+    // Download model files
+    let modelDirectory = try await downloader.download(
+      id: config.modelId,
+      revision: nil,
+      matching: ["*.safetensors", "*.json"],
+      useLatest: false,
       progressHandler: progressHandler,
     )
 
+    // Download DAC codec files
+    let dacDirectory = try await downloader.download(
+      id: DACCodec.defaultRepoId,
+      revision: nil,
+      matching: ["*.safetensors", "*.json"],
+      useLatest: false,
+      progressHandler: progressHandler,
+    )
+
+    return try await load(
+      config: config,
+      from: modelDirectory,
+      dacDirectory: dacDirectory,
+      using: tokenizerLoader,
+    )
+  }
+
+  // MARK: - Model Loading
+
+  /// Load OuteTTS model and tokenizer from a local directory
+  private static func loadOuteTTSModel(
+    from directory: URL,
+    using tokenizerLoader: any TokenizerLoader
+  ) async throws -> (OuteTTSLMHeadModel, any Tokenizer) {
     // Load config
-    let configURL = modelDirectory.appending(component: "config.json")
+    let configURL = directory.appending(component: "config.json")
     var configData = try Data(contentsOf: configURL)
 
     // Fix rope_scaling values that may be integers instead of floats
@@ -207,7 +227,7 @@ actor OuteTTS {
 
     // Load weights from safetensor files
     var weights = [String: MLXArray]()
-    let contents = try FileManager.default.contentsOfDirectory(at: modelDirectory, includingPropertiesForKeys: nil)
+    let contents = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
     let safetensorFiles = contents.filter { $0.pathExtension == "safetensors" }
     for url in safetensorFiles {
       let w = try MLX.loadArrays(url: url)
@@ -245,27 +265,7 @@ actor OuteTTS {
     eval(model)
 
     // Load tokenizer
-    let tokenizerConfigURL = modelDirectory.appending(component: "tokenizer_config.json")
-    let tokenizerDataURL = modelDirectory.appending(component: "tokenizer.json")
-
-    guard FileManager.default.fileExists(atPath: tokenizerConfigURL.path) else {
-      throw OuteTTSEngineError.generationFailed("tokenizer_config.json not found")
-    }
-    guard FileManager.default.fileExists(atPath: tokenizerDataURL.path) else {
-      throw OuteTTSEngineError.generationFailed("tokenizer.json not found")
-    }
-
-    let tokenizerConfigData = try Data(contentsOf: tokenizerConfigURL)
-    let tokenizerDataData = try Data(contentsOf: tokenizerDataURL)
-
-    let decoder = JSONDecoder()
-    let tokenizerConfig = try decoder.decode(Config.self, from: tokenizerConfigData)
-    let tokenizerData = try decoder.decode(Config.self, from: tokenizerDataData)
-
-    let tokenizer = try PreTrainedTokenizer(
-      tokenizerConfig: tokenizerConfig,
-      tokenizerData: tokenizerData,
-    )
+    let tokenizer = try await tokenizerLoader.load(from: directory)
 
     return (model, tokenizer)
   }

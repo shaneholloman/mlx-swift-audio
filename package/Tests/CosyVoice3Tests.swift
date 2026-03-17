@@ -1,7 +1,8 @@
 import AVFoundation
 import Foundation
-import Hub
 import MLX
+import MLXLMHFAPI
+import MLXLMTokenizers
 import MLXNN
 import Testing
 
@@ -73,7 +74,11 @@ struct CosyVoice3UnitTests {
 
     print("Loading CosyVoice3 model...")
     let loadStart = CFAbsoluteTimeGetCurrent()
-    _ = try await CosyVoice3TTS.load(repoId: modelRepoId)
+    _ = try await CosyVoice3TTS.load(
+      id: modelRepoId,
+      from: HubClient.default,
+      using: TokenizersLoader()
+    )
     let loadTime = CFAbsoluteTimeGetCurrent() - loadStart
     print("Model loaded in \(String(format: "%.2f", loadTime))s")
 
@@ -132,10 +137,10 @@ struct CosyVoice3UnitTests {
 
 @Suite(.serialized)
 struct CosyVoice3IntegrationTests {
-  /// HuggingFace repo ID for 4-bit model
+  /// Repo ID for 4-bit model
   static let modelRepoId = "mlx-community/Fun-CosyVoice3-0.5B-2512-4bit"
 
-  /// HuggingFace repo ID for S3 tokenizer V3 (CosyVoice3 uses V3 with 12 layers)
+  /// Repo ID for S3 tokenizer V3 (CosyVoice3 uses V3 with 12 layers)
   static let s3TokenizerRepoId = "mlx-community/S3TokenizerV3"
 
   /// Reference audio from LJ Speech dataset (public domain)
@@ -148,9 +153,15 @@ struct CosyVoice3IntegrationTests {
   /// Output directory for generated audio
   static let outputDir = FileManager.default.temporaryDirectory.appendingPathComponent("cosyvoice3-test")
 
-  /// Load S3TokenizerV3 from HuggingFace (CosyVoice3 uses V3 with 12 layers)
+  /// Download and load S3TokenizerV3 (CosyVoice3 uses V3 with 12 layers)
   static func loadS3Tokenizer() async throws -> S3TokenizerV3 {
-    let modelDirectory = try await HubConfiguration.shared.snapshot(from: s3TokenizerRepoId)
+    let modelDirectory = try await HubClient.default.download(
+      id: s3TokenizerRepoId,
+      revision: nil,
+      matching: ["*.safetensors"],
+      useLatest: false,
+      progressHandler: { _ in }
+    )
     let weightURL = modelDirectory.appendingPathComponent("model.safetensors")
     let weights = try MLX.loadArrays(url: weightURL)
 
@@ -328,7 +339,11 @@ struct CosyVoice3IntegrationTests {
     print("Step 1: Loading models...")
 
     let ttsStart = CFAbsoluteTimeGetCurrent()
-    let tts = try await CosyVoice3TTS.load(repoId: Self.modelRepoId)
+    let tts = try await CosyVoice3TTS.load(
+      id: Self.modelRepoId,
+      from: HubClient.default,
+      using: TokenizersLoader()
+    )
     print("  CosyVoice3 loaded in \(String(format: "%.2f", CFAbsoluteTimeGetCurrent() - ttsStart))s")
 
     let s3Start = CFAbsoluteTimeGetCurrent()

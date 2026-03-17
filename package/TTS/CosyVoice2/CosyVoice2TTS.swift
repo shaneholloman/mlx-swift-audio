@@ -4,10 +4,9 @@
 // License: licenses/cosyvoice.txt
 
 import Foundation
-import Hub
 import MLX
+import MLXLMCommon
 import MLXNN
-import Tokenizers
 
 /// Actor wrapper for CosyVoice2Model that provides thread-safe generation
 actor CosyVoice2TTS {
@@ -21,7 +20,7 @@ actor CosyVoice2TTS {
   private nonisolated(unsafe) let speakerEncoder: CAMPlusSpeakerEncoder
 
   /// Text tokenizer (Qwen2 with CosyVoice2 special tokens)
-  private let textTokenizer: PreTrainedTokenizer
+  private let textTokenizer: any MLXLMCommon.Tokenizer
 
   /// Output sample rate (24kHz for CosyVoice2)
   static let outputSampleRate: Int = 24000
@@ -65,36 +64,26 @@ actor CosyVoice2TTS {
   // MARK: - Initialization
 
   private init(
-    model: CosyVoice2Model, speakerEncoder: CAMPlusSpeakerEncoder, textTokenizer: PreTrainedTokenizer
+    model: CosyVoice2Model, speakerEncoder: CAMPlusSpeakerEncoder, textTokenizer: any MLXLMCommon.Tokenizer
   ) {
     self.model = model
     self.speakerEncoder = speakerEncoder
     self.textTokenizer = textTokenizer
   }
 
-  /// Default HuggingFace repository ID for CosyVoice2
+  /// Default repository ID for CosyVoice2
   static let defaultRepoId = "mlx-community/CosyVoice2-0.5B-4bit"
 
-  /// Load CosyVoice2TTS from HuggingFace repository
-  /// - Parameters:
-  ///   - repoId: HuggingFace repository ID (default: mlx-community/CosyVoice2-0.5B-4bit)
-  ///   - progressHandler: Optional progress handler for download
-  /// - Returns: Loaded CosyVoice2TTS instance
+  /// Load CosyVoice2TTS from a local directory
   static func load(
-    repoId: String = defaultRepoId,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+    from directory: URL,
+    using tokenizerLoader: any TokenizerLoader
   ) async throws -> CosyVoice2TTS {
-    // Download model snapshot from HuggingFace
-    let modelDirectory = try await HubConfiguration.shared.snapshot(
-      from: repoId,
-      progressHandler: progressHandler
-    )
-
     // Load configuration
-    let config = try CosyVoice2Config.fromPretrained(modelPath: modelDirectory.path)
+    let config = try CosyVoice2Config.fromPretrained(modelPath: directory.path)
 
     // Load model weights
-    let modelURL = modelDirectory.appendingPathComponent("model.safetensors")
+    let modelURL = directory.appendingPathComponent("model.safetensors")
     guard FileManager.default.fileExists(atPath: modelURL.path) else {
       throw CosyVoice2Error.modelNotLoaded
     }
@@ -117,36 +106,27 @@ actor CosyVoice2TTS {
     }
 
     // Load text tokenizer (Qwen2 with CosyVoice2 special tokens)
-    let textTokenizer = try loadTokenizer(modelDirectory: modelDirectory)
+    let textTokenizer = try await tokenizerLoader.load(from: directory)
 
     return CosyVoice2TTS(model: model, speakerEncoder: speakerEncoder, textTokenizer: textTokenizer)
   }
 
-  /// Load Qwen2 tokenizer from model directory
-  /// - Parameter modelDirectory: URL to the model directory containing tokenizer.json and tokenizer_config.json
-  /// - Returns: PreTrainedTokenizer configured for CosyVoice2
-  private static func loadTokenizer(modelDirectory: URL) throws -> PreTrainedTokenizer {
-    let tokenizerConfigURL = modelDirectory.appendingPathComponent("tokenizer_config.json")
-    let tokenizerDataURL = modelDirectory.appendingPathComponent("tokenizer.json")
-
-    guard FileManager.default.fileExists(atPath: tokenizerConfigURL.path) else {
-      throw CosyVoice2Error.tokenizerNotFound("tokenizer_config.json not found at \(modelDirectory.path)")
-    }
-    guard FileManager.default.fileExists(atPath: tokenizerDataURL.path) else {
-      throw CosyVoice2Error.tokenizerNotFound("tokenizer.json not found at \(modelDirectory.path)")
-    }
-
-    let tokenizerConfigData = try Data(contentsOf: tokenizerConfigURL)
-    let tokenizerDataData = try Data(contentsOf: tokenizerDataURL)
-
-    let decoder = JSONDecoder()
-    let tokenizerConfig = try decoder.decode(Config.self, from: tokenizerConfigData)
-    let tokenizerData = try decoder.decode(Config.self, from: tokenizerDataData)
-
-    return try PreTrainedTokenizer(
-      tokenizerConfig: tokenizerConfig,
-      tokenizerData: tokenizerData
+  /// Download and load CosyVoice2TTS
+  static func load(
+    id: String = defaultRepoId,
+    from downloader: any Downloader,
+    using tokenizerLoader: any TokenizerLoader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+  ) async throws -> CosyVoice2TTS {
+    let modelDirectory = try await downloader.download(
+      id: id,
+      revision: nil,
+      matching: [],
+      useLatest: false,
+      progressHandler: progressHandler
     )
+
+    return try await load(from: modelDirectory, using: tokenizerLoader)
   }
 
   /// Create model from config and weights
@@ -155,7 +135,7 @@ actor CosyVoice2TTS {
     weights: [String: MLXArray]
   ) throws -> CosyVoice2Model {
     // Create Qwen2 config
-    var qwen2Config = Qwen2Config()
+    var qwen2Config = CosyVoiceQwen2Config()
     qwen2Config.hiddenSize = config.llm.hiddenSize
     qwen2Config.numHiddenLayers = config.llm.numHiddenLayers
     qwen2Config.intermediateSize = config.llm.intermediateSize
@@ -717,7 +697,7 @@ actor CosyVoice2TTS {
   ///   - skipSpecialTokens: Whether to skip special tokens (default: true)
   /// - Returns: Decoded text
   func decode(tokens: [Int], skipSpecialTokens: Bool = true) -> String {
-    textTokenizer.decode(tokens: tokens, skipSpecialTokens: skipSpecialTokens)
+    textTokenizer.decode(tokenIds: tokens, skipSpecialTokens: skipSpecialTokens)
   }
 
   /// Get the token ID for a specific token string

@@ -8,7 +8,6 @@ import Foundation
 @preconcurrency import MLX
 @preconcurrency import MLXLMCommon
 @preconcurrency import MLXNN
-import MLXRandom
 import Synchronization
 
 // Orpheus TTS - Swift implementation of the Orpheus 3B model
@@ -99,22 +98,22 @@ actor OrpheusTTS {
     self.tokenizer = tokenizer
   }
 
+  /// Load OrpheusTTS from local directories
   static func load(
-    repoId: String = OrpheusWeightLoader.defaultRepoId,
-    snacRepoId: String = SNACDecoder.defaultRepoId,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
-  ) async throws -> OrpheusTTS {
-    // Load model weights and quantization config from Hub (single snapshot call)
-    let (loadedWeights, quantConfig) = try await Profiler.timeAsync("Weight and config loading") {
-      try await OrpheusWeightLoader.load(repoId: repoId, progressHandler: progressHandler)
+    from directory: URL,
+    snacDirectory: URL
+  ) throws -> OrpheusTTS {
+    // Load model weights and quantization config
+    let (loadedWeights, quantConfig) = try Profiler.time("Weight and config loading") {
+      try OrpheusWeightLoader.load(from: directory)
     }
 
     // Load SNAC decoder weights and config
-    let snacConfig = try await Profiler.timeAsync("SNAC config loading") {
-      try await SNACDecoder.loadConfig(repoId: snacRepoId, progressHandler: progressHandler)
+    let snacConfig = try Profiler.time("SNAC config loading") {
+      try SNACDecoder.loadConfig(from: snacDirectory)
     }
-    let snacWeights = try await Profiler.timeAsync("SNAC weights loading") {
-      try await SNACDecoder.loadWeights(repoId: snacRepoId, progressHandler: progressHandler)
+    let snacWeights = try Profiler.time("SNAC weights loading") {
+      try SNACDecoder.loadWeights(from: snacDirectory)
     }
 
     // Initialize SNAC decoder using standard Module pattern
@@ -130,17 +129,14 @@ actor OrpheusTTS {
       snacDecoder.setQuantizerWeights(quantizerWeights)
     }
 
-    // Evaluate SNAC model
     Profiler.time("SNAC model evaluation") {
       eval(snacDecoder)
     }
 
-    // Download and load tokenizer files from Hub
-    let tokenizerURLs = try await Profiler.timeAsync("Tokenizer download") {
-      try await OrpheusTokenizer.download(repoId: repoId, progressHandler: progressHandler)
-    }
+    // Load tokenizer files from model directory
+    let tokenizerFileURLs = OrpheusTokenizer.tokenizerURLs(from: directory)
     let tokenizer = try Profiler.time("Tokenizer init") {
-      try OrpheusTokenizer(tokenizerURL: tokenizerURLs.tokenizerURL, configURL: tokenizerURLs.configURL)
+      try OrpheusTokenizer(tokenizerURL: tokenizerFileURLs.tokenizerURL, configURL: tokenizerFileURLs.configURL)
     }
 
     // Initialize the model using Module pattern
@@ -158,18 +154,48 @@ actor OrpheusTTS {
       }
     }
 
-    // Load weights into model using Module system
     try Profiler.time("Weight loading into model") {
       let parameters = ModuleParameters.unflattened(loadedWeights)
       try model.update(parameters: parameters, verify: [.all])
     }
 
-    // Evaluate model to ensure weights are loaded
     Profiler.time("Model evaluation") {
       eval(model)
     }
 
     return OrpheusTTS(model: model, snacDecoder: snacDecoder, tokenizer: tokenizer)
+  }
+
+  /// Download and load OrpheusTTS
+  static func load(
+    id: String = OrpheusWeightLoader.defaultRepoId,
+    snacRepoId: String = SNACDecoder.defaultRepoId,
+    from downloader: any Downloader,
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
+  ) async throws -> OrpheusTTS {
+    // Download model weights
+    let modelDirectory = try await Profiler.timeAsync("Model download") {
+      try await downloader.download(
+        id: id,
+        revision: nil,
+        matching: ["model.safetensors", "config.json", "tokenizer.json", "tokenizer_config.json"],
+        useLatest: false,
+        progressHandler: progressHandler
+      )
+    }
+
+    // Download SNAC decoder
+    let snacDirectory = try await Profiler.timeAsync("SNAC download") {
+      try await downloader.download(
+        id: snacRepoId,
+        revision: nil,
+        matching: ["model.safetensors", "config.json"],
+        useLatest: false,
+        progressHandler: progressHandler
+      )
+    }
+
+    return try load(from: modelDirectory, snacDirectory: snacDirectory)
   }
 
   func generate(text: String, voice: OrpheusEngine.Voice, temperature: Float = 0.6, topP: Float = 0.8) throws -> TTSGenerationResult {
