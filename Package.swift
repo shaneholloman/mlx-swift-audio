@@ -17,9 +17,10 @@ let package = Package(
     ),
   ],
   dependencies: [
-    .package(url: "https://github.com/DePasqualeOrg/mlx-swift-lm", branch: "swift-tokenizers"),
-    .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.30.6")),
-    .package(url: "https://github.com/DePasqualeOrg/swift-tokenizers-mlx", branch: "main"),
+    // TODO: Switch from this pinned revision to a major-version dependency once mlx-swift-lm publishes a release that includes PR #118.
+    .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", revision: "8c9dd6391139242261bcf27d253c326f9cf2d567"),
+    .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.31.3")),
+    .package(url: "https://github.com/DePasqualeOrg/swift-tokenizers-mlx", branch: "main", traits: ["Swift"]),
     .package(url: "https://github.com/DePasqualeOrg/swift-hf-api-mlx", branch: "main"),
     .package(url: "https://github.com/DePasqualeOrg/swift-tiktoken", branch: "main"),
     // espeak-ng is GPLv3 licensed - only linked when using Kokoro
