@@ -117,7 +117,7 @@ public struct SenseVoiceEncoderConfig: Codable, Sendable {
     numEncoders0: Int = 1,
     numEncoders: Int = 49,
     numTPEncoders: Int = 20,
-    dropout: Float = 0.0
+    dropout: Float = 0.0,
   ) {
     self.inputDim = inputDim
     self.encoderDim = encoderDim
@@ -184,14 +184,23 @@ public struct AudioAdaptorConfig: Codable, Sendable {
   /// Dropout rate
   public var dropout: Float
 
+  /// Whether to use the low-frame-rate audio token count.
+  ///
+  /// Matches upstream PyTorch's `use_low_frame_rate=True`, which slices the first
+  /// `fake_token_len` frames of the adaptor output before merging into the LLM
+  /// prompt. The formula is three successive 2× downsamples on the LFR-processed
+  /// frame count.
+  public var useLowFrameRate: Bool
+
   public init(
-    downsampleRate: Int = 2,
+    downsampleRate: Int = 1,
     encoderDim: Int = 512,
     llmDim: Int = 1024,
     ffnDim: Int = 2048,
     nLayer: Int = 2,
     attentionHeads: Int = 8,
-    dropout: Float = 0.0
+    dropout: Float = 0.0,
+    useLowFrameRate: Bool = true,
   ) {
     self.downsampleRate = downsampleRate
     self.encoderDim = encoderDim
@@ -200,6 +209,7 @@ public struct AudioAdaptorConfig: Codable, Sendable {
     self.nLayer = nLayer
     self.attentionHeads = attentionHeads
     self.dropout = dropout
+    self.useLowFrameRate = useLowFrameRate
   }
 
   enum CodingKeys: String, CodingKey {
@@ -210,6 +220,19 @@ public struct AudioAdaptorConfig: Codable, Sendable {
     case nLayer = "n_layer"
     case attentionHeads = "attention_heads"
     case dropout
+    case useLowFrameRate = "use_low_frame_rate"
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    downsampleRate = try container.decodeIfPresent(Int.self, forKey: .downsampleRate) ?? 1
+    encoderDim = try container.decodeIfPresent(Int.self, forKey: .encoderDim) ?? 512
+    llmDim = try container.decodeIfPresent(Int.self, forKey: .llmDim) ?? 1024
+    ffnDim = try container.decodeIfPresent(Int.self, forKey: .ffnDim) ?? 2048
+    nLayer = try container.decodeIfPresent(Int.self, forKey: .nLayer) ?? 2
+    attentionHeads = try container.decodeIfPresent(Int.self, forKey: .attentionHeads) ?? 8
+    dropout = try container.decodeIfPresent(Float.self, forKey: .dropout) ?? 0.0
+    useLowFrameRate = try container.decodeIfPresent(Bool.self, forKey: .useLowFrameRate) ?? true
   }
 }
 
@@ -260,8 +283,8 @@ public struct Qwen3Config: Codable, Sendable {
     maxPositionEmbeddings: Int = 40960,
     ropeTheta: Float = 1_000_000.0,
     rmsNormEps: Float = 1e-6,
-    tieWordEmbeddings: Bool = true,
-    headDim: Int = 64
+    tieWordEmbeddings: Bool = false,
+    headDim: Int = 128,
   ) {
     self.vocabSize = vocabSize
     self.hiddenSize = hiddenSize
@@ -355,7 +378,7 @@ public struct FunASRConfig: Codable, Sendable {
     imStartToken: String = "<|im_start|>",
     imEndToken: String = "<|im_end|>",
     maxTokens: Int = 512,
-    temperature: Float = 0.0
+    temperature: Float = 0.0,
   ) {
     self.sampleRate = sampleRate
     self.nMels = nMels
@@ -450,6 +473,29 @@ public enum FunASRLanguage: String, CaseIterable, Sendable {
       case .thai: "Thai"
       case .vietnamese: "Vietnamese"
       case .auto: "Auto-detect"
+    }
+  }
+
+  /// Chinese language name expected by the upstream Fun-ASR prompt template.
+  ///
+  /// Returns `nil` for `.auto`, which omits the language hint so the model
+  /// transcribes in the source language.
+  var promptName: String? {
+    switch self {
+      case .auto: nil
+      case .english: "英文"
+      case .chinese: "中文"
+      case .japanese: "日文"
+      case .korean: "韩文"
+      case .vietnamese: "越南语"
+      case .arabic: "阿拉伯语"
+      case .thai: "泰语"
+      case .portuguese: "葡萄牙语"
+      case .french: "法语"
+      case .german: "德语"
+      case .italian: "意大利语"
+      case .russian: "俄语"
+      case .spanish: "西班牙语"
     }
   }
 }

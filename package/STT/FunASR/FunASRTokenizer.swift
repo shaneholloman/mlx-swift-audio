@@ -9,16 +9,11 @@ import MLXLMCommon
 /// Fun-ASR tokenizer wrapper for Qwen3
 ///
 /// Uses a TokenizerLoader for Qwen3 tokenization.
-/// Tracks special token IDs for speech recognition prompts.
 class FunASRTokenizer {
   private let tokenizer: any MLXLMCommon.Tokenizer
 
-  // Special token IDs
-  let sosTokenId: Int?
-  let eosTokenId: Int?
+  /// Token IDs that signal the end of generation.
   let eosTokenIds: Set<Int>
-  let imStartTokenId: Int?
-  let imEndTokenId: Int?
 
   // Configuration
   let config: FunASRConfig
@@ -27,40 +22,24 @@ class FunASRTokenizer {
     self.tokenizer = tokenizer
     self.config = config
 
-    // Resolve special token IDs
-    // Try to encode special tokens to get their IDs
-    sosTokenId = Self.resolveTokenId(tokenizer: tokenizer, token: config.sosToken)
-    eosTokenId = Self.resolveTokenId(tokenizer: tokenizer, token: config.eosToken)
-    imStartTokenId = Self.resolveTokenId(tokenizer: tokenizer, token: config.imStartToken)
-    imEndTokenId = Self.resolveTokenId(tokenizer: tokenizer, token: config.imEndToken)
-
-    // Build set of EOS token IDs for stopping generation
+    // Build set of EOS token IDs for stopping generation.
+    // The Fun-ASR speech markers (`<|startofspeech|>` / `<|endofspeech|>`) are
+    // not added tokens — they decompose to multi-token BPE sequences and must
+    // never be used as stop tokens.
     var eosIds = Set<Int>()
-    if let eosId = eosTokenId {
-      eosIds.insert(eosId)
-    }
-    // Also add common EOS tokens
-    let commonEosTokens = ["<|endoftext|>", "<|im_end|>", "</s>"]
-    for token in commonEosTokens {
-      if let tokenId = Self.resolveTokenId(tokenizer: tokenizer, token: token) {
-        eosIds.insert(tokenId)
+    let stopTokens = ["<|endoftext|>", "<|im_end|>", "</s>"]
+    for token in stopTokens {
+      let encoded = tokenizer.encode(text: token)
+      // Only treat as a stop token if it tokenizes to a single ID, i.e. it is
+      // an added token in the tokenizer's vocabulary.
+      if encoded.count == 1, let id = encoded.first {
+        eosIds.insert(id)
       }
     }
-    // Try to get the tokenizer's EOS token
     if let tokenizerEos = tokenizer.eosTokenId {
       eosIds.insert(tokenizerEos)
     }
     eosTokenIds = eosIds
-  }
-
-  /// Resolve a token to its ID
-  ///
-  /// Takes the first token ID from encoding, similar to Python's approach.
-  /// This handles both single-token and multi-token encodings.
-  private static func resolveTokenId(tokenizer: any MLXLMCommon.Tokenizer, token: String) -> Int? {
-    let encoded = tokenizer.encode(text: token)
-    // Take the first token ID if available
-    return encoded.first
   }
 
   /// Load tokenizer from model directory
@@ -70,7 +49,7 @@ class FunASRTokenizer {
   ///   - config: Fun-ASR configuration
   /// - Returns: Initialized tokenizer
   static func load(
-    from directory: URL, config: FunASRConfig, using tokenizerLoader: any TokenizerLoader
+    from directory: URL, config: FunASRConfig, using tokenizerLoader: any TokenizerLoader,
   ) async throws -> FunASRTokenizer {
     // Load tokenizer from the model directory
     let tokenizer = try await tokenizerLoader.load(from: directory)
@@ -101,119 +80,88 @@ class FunASRTokenizer {
     eosTokenIds.contains(tokenId)
   }
 
-  /// Build the prompt template for transcription/translation
+  /// Build the prompt as the pair of token sequences that go before and after
+  /// the audio embeddings.
   ///
-  /// The template follows the Qwen3 chat format:
-  /// ```
-  /// <|im_start|>system
-  /// {system_prompt}<|im_end|>
-  /// <|im_start|>user
-  /// <|startofspeech|><|endofspeech|><|im_end|>
-  /// <|im_start|>assistant
-  /// ```
+  /// The PyTorch reference (`fun_asr_nano/model.py`) splits the source string
+  /// on `<|startofspeech|>...<|endofspeech|>` and tokenizes the surrounding
+  /// text. The marker substring is replaced by `fake_token_len` placeholder
+  /// zeros that are later overwritten by audio embeddings. We avoid the
+  /// placeholders entirely and splice at the embedding level: the LLM sees
+  /// `embed(pre) | audio_embeddings | embed(post)`.
+  ///
+  /// The marker tokens themselves are never sent to the LLM — they decompose
+  /// to BPE pieces in this tokenizer (`<`, `|`, `start`, ...), and shipping
+  /// them would corrupt the prompt.
   ///
   /// - Parameters:
   ///   - task: Task type (transcribe or translate)
-  ///   - language: Source language (or "auto" for detection)
+  ///   - language: Source language (or `.auto` for detection)
   ///   - targetLanguage: Target language for translation
-  ///   - initialPrompt: Custom instructions to include
-  /// - Returns: Encoded token IDs for the prompt
-  func buildPrompt(
+  ///   - initialPrompt: Custom instructions to prepend to the user prompt
+  /// - Returns: Token IDs for the text before the audio (`pre`) and after it
+  ///   (`post`). Concatenating `embed(pre) + audio + embed(post)` gives the
+  ///   full LLM input.
+  func buildPromptParts(
     task: FunASRTask,
     language: FunASRLanguage = .auto,
     targetLanguage: FunASRLanguage = .english,
-    initialPrompt: String? = nil
-  ) -> [Int] {
-    let systemPrompt = buildSystemPrompt(
+    initialPrompt: String? = nil,
+  ) -> (pre: [Int], post: [Int]) {
+    let systemPrompt = buildSystemPrompt(task: task)
+    let userInstruction = buildUserInstruction(
       task: task,
       language: language,
       targetLanguage: targetLanguage,
-      initialPrompt: initialPrompt
+      initialPrompt: initialPrompt,
     )
 
-    let promptParts = [
-      "\(config.imStartToken)system\n\(systemPrompt)\(config.imEndToken)",
-      "\(config.imStartToken)user\n",
-      "\(config.sosToken)\(config.eosToken)",
-      "\(config.imEndToken)",
-      "\(config.imStartToken)assistant\n",
-    ]
-    let prompt = promptParts.joined()
+    let preText =
+      "\(config.imStartToken)system\n\(systemPrompt)\(config.imEndToken)\n"
+        + "\(config.imStartToken)user\n\(userInstruction)"
+    let postText =
+      "\(config.imEndToken)\n\(config.imStartToken)assistant\n"
 
-    return encode(prompt)
+    return (encode(preText), encode(postText))
   }
 
-  /// Build system prompt based on task and language settings
+  /// System prompt matching the upstream Fun-ASR reference (`generate_chatml`).
+  private func buildSystemPrompt(task _: FunASRTask) -> String {
+    "You are a helpful assistant."
+  }
+
+  /// User instruction text up to (but not including) the speech markers.
   ///
-  /// - Parameters:
-  ///   - task: Task type
-  ///   - language: Source language
-  ///   - targetLanguage: Target language for translation
-  ///   - initialPrompt: Custom instructions
-  /// - Returns: System prompt string
-  func buildSystemPrompt(
+  /// Matches upstream PyTorch's `get_prompt`:
+  /// `语音转写：` for `.auto`, `语音转写成{language}：` otherwise.
+  ///
+  /// Upstream Fun-ASR has no separate translation template. The
+  /// "transcribe to `{language}`" prompt with `language` set to the target
+  /// effectively serves as translation when the source language differs
+  /// from the target — the multilingual variant follows it; the
+  /// transcription-only variant generally does not.
+  private func buildUserInstruction(
     task: FunASRTask,
     language: FunASRLanguage,
     targetLanguage: FunASRLanguage,
-    initialPrompt: String?
+    initialPrompt: String?,
   ) -> String {
-    let basePrompt: String
-    switch task {
-      case .translate:
-        let targetLangName = targetLanguage.displayName
-        if language == .auto {
-          basePrompt =
-            "You are a speech translation assistant. Listen to the audio and translate the speech into \(targetLangName). Output only the translation, nothing else."
-        } else {
-          let sourceLangName = language.displayName
-          basePrompt =
-            "You are a speech translation assistant. The audio is in \(sourceLangName). Translate it into \(targetLangName). Output only the translation, nothing else."
-        }
-      case .transcribe:
-        if language == .auto {
-          basePrompt =
-            "You are a speech recognition assistant. Transcribe the audio accurately. Output only the transcription, nothing else."
-        } else {
-          let langName = language.displayName
-          basePrompt =
-            "You are a speech recognition assistant. The audio is in \(langName). Transcribe it accurately. Output only the transcription, nothing else."
-        }
+    let promptLanguage: FunASRLanguage = switch task {
+      case .transcribe: language
+      case .translate: targetLanguage
     }
-
-    if let initialPrompt {
-      return "\(initialPrompt)\n\n\(basePrompt)"
+    var instruction = if let langName = promptLanguage.promptName {
+      "语音转写成\(langName)："
+    } else {
+      "语音转写："
     }
-    return basePrompt
+    if let initialPrompt, !initialPrompt.isEmpty {
+      instruction = "\(initialPrompt)\n\n\(instruction)"
+    }
+    return instruction
   }
 
-  /// Find the positions of SOS and EOS tokens in token IDs
-  ///
-  /// - Parameter tokenIds: Array of token IDs
-  /// - Returns: Tuple of (sosPosition, eosPosition), nil if not found
-  func findSpeechTokenPositions(_ tokenIds: [Int]) -> (sosPosition: Int, eosPosition: Int)? {
-    guard let sosId = sosTokenId, let eosId = eosTokenId else {
-      return nil
-    }
-
-    var sosPos: Int?
-    var eosPos: Int?
-
-    for (i, tokenId) in tokenIds.enumerated() {
-      if tokenId == sosId, sosPos == nil {
-        sosPos = i
-      }
-      if tokenId == eosId, eosPos == nil {
-        eosPos = i
-      }
-    }
-
-    if let sos = sosPos, let eos = eosPos {
-      return (sos, eos)
-    }
-    return nil
-  }
-
-  /// Clean output text by removing special tokens and artifacts
+  /// Clean output text by removing special tokens and artifacts.
   ///
   /// - Parameter text: Raw generated text
   /// - Returns: Cleaned text
@@ -226,11 +174,11 @@ class FunASRTokenizer {
       cleaned = regex.stringByReplacingMatches(
         in: cleaned,
         range: NSRange(cleaned.startIndex..., in: cleaned),
-        withTemplate: ""
+        withTemplate: "",
       )
     }
 
-    // Remove special tokens
+    // Strip any literal special token strings that may appear in the output.
     let specialTokens = [
       config.imStartToken,
       config.imEndToken,

@@ -32,13 +32,30 @@ class FunASRModel: Module {
     llm = Qwen3ForCausalLM(config: config.llm)
   }
 
-  /// Encode audio to embeddings
+  /// Encode audio to embeddings, sliced to the audio-token count the LLM
+  /// expects.
+  ///
+  /// Matches the upstream PyTorch path: when `use_low_frame_rate=true` the
+  /// model only consumes the first `fake_token_len` frames of the adaptor
+  /// output (three successive 2× downsamples on the LFR frame count).
+  /// Inserting all `T` frames — as a naive port would — gives the LLM ~8× the
+  /// embeddings it was trained on, which manifests as repeated tokens / high
+  /// CER on long audio.
   ///
   /// - Parameter audio: Audio waveform (T,) at 16kHz
-  /// - Returns: Audio embeddings projected to LLM space (1, seq, llmDim)
+  /// - Returns: Audio embeddings (1, fakeTokenLen, llmDim)
   func encodeAudio(_ audio: MLXArray) -> MLXArray {
-    // Preprocess audio
-    let features = preprocessAudio(audio, nMels: config.nMels, lfrM: config.lfrM, lfrN: config.lfrN)
+    // Preprocess audio. CMVN is intentionally disabled by default to match the
+    // upstream config (`cmvn_file: null`); enabling per-utterance CMVN
+    // shifts/scales the features in a way the model wasn't trained for.
+    let features = preprocessAudio(
+      audio,
+      nMels: config.nMels,
+      lfrM: config.lfrM,
+      lfrN: config.lfrN,
+      applyNormalization: false,
+      dither: 1.0,
+    )
 
     // Add batch dimension
     var batchedFeatures = features
@@ -52,90 +69,60 @@ class FunASRModel: Module {
     // Adapt to LLM space
     let (adapted, _) = audioAdaptor(encoderOut, lengths: lengths)
 
-    return adapted
+    // Slice the adaptor output to the audio-token count the LLM expects.
+    let lfrFrameCount = features.shape[0]
+    let audioTokenLen: Int = if config.adaptor.useLowFrameRate {
+      Self.fakeTokenLen(lfrFrameCount: lfrFrameCount)
+    } else {
+      adapted.shape[1]
+    }
+    let truncatedLen = min(audioTokenLen, adapted.shape[1])
+    return adapted[0..., 0 ..< truncatedLen, 0...]
   }
 
-  /// Merge audio embeddings with text embeddings
+  /// Audio-token count from the LFR-processed frame count.
   ///
-  /// The audio embeddings replace the speech token placeholder region
-  /// (between SOS and EOS tokens in the prompt).
+  /// Mirrors the upstream PyTorch formula in `fun_asr_nano/model.py`:
+  ///
+  /// ```python
+  /// olens = 1 + (T - 3 + 2 * 1) // 2
+  /// olens = 1 + (olens - 3 + 2 * 1) // 2
+  /// fake_token_len = (olens - 1) // 2 + 1
+  /// ```
+  ///
+  /// Three successive 2× downsamples (kernel=3, stride=2, padding=1).
+  static func fakeTokenLen(lfrFrameCount T: Int) -> Int {
+    let olens1 = 1 + (T - 1) / 2
+    let olens2 = 1 + (olens1 - 1) / 2
+    return (olens2 - 1) / 2 + 1
+  }
+
+  /// Splice the audio embeddings between the pre-audio and post-audio prompt
+  /// tokens.
+  ///
+  /// The LLM sees `embed(preTokens) | audioEmbeddings | embed(postTokens)`.
+  /// This matches PyTorch's `data_load_speech` / `inference_prepare` flow
+  /// without ever putting the literal speech-marker BPE pieces into the
+  /// prompt.
   ///
   /// - Parameters:
-  ///   - inputIds: Token IDs with speech placeholders (batch, seq)
-  ///   - audioEmbeddings: Encoded audio embeddings (batch, audioSeq, llmDim)
-  ///   - sosTokenId: Start of speech token ID
-  ///   - eosTokenId: End of speech token ID
-  /// - Returns: Combined embeddings (batch, newSeq, llmDim)
-  func mergeEmbeddings(
-    inputIds: MLXArray,
+  ///   - preTokens: Tokens before the audio (system + user instruction)
+  ///   - audioEmbeddings: Audio-token embeddings, shape `(audioLen, llmDim)`
+  ///     or `(1, audioLen, llmDim)`
+  ///   - postTokens: Tokens after the audio (`<|im_end|><|im_start|>assistant\n`)
+  /// - Returns: Combined embeddings `(1, total, llmDim)`
+  func spliceEmbeddings(
+    preTokens: [Int],
     audioEmbeddings: MLXArray,
-    sosTokenId: Int,
-    eosTokenId: Int
+    postTokens: [Int],
   ) -> MLXArray {
-    // Get text embeddings
-    let textEmbeddings = llm.getInputEmbeddings()(inputIds)
-
-    let batchSize = inputIds.shape[0]
-    var allEmbeddings: [MLXArray] = []
-
-    for b in 0 ..< batchSize {
-      let ids = inputIds[b]
-      let textEmb = textEmbeddings[b]
-      let audioEmb = audioEmbeddings.ndim == 3 ? audioEmbeddings[b] : audioEmbeddings
-
-      // Find SOS and EOS positions
-      // Use a simple loop since MLX doesn't have efficient argwhere
-      var sosPos: Int?
-      var eosPos: Int?
-
-      let idsArray = ids.asArray(Int32.self)
-      for (i, id) in idsArray.enumerated() {
-        if id == Int32(sosTokenId), sosPos == nil {
-          sosPos = i
-        }
-        if id == Int32(eosTokenId), eosPos == nil {
-          eosPos = i
-        }
-      }
-
-      guard let sos = sosPos, let eos = eosPos else {
-        // If tokens not found, just use text embeddings
-        allEmbeddings.append(textEmb)
-        continue
-      }
-
-      // Build merged embeddings:
-      // [text_before_sos, sos_emb, audio_emb, eos_emb, text_after_eos]
-      var parts: [MLXArray] = []
-
-      // Text before SOS (including SOS)
-      if sos >= 0 {
-        parts.append(textEmb[0 ... sos])
-      }
-
-      // Audio embeddings
-      parts.append(audioEmb)
-
-      // Text from EOS onwards (including EOS)
-      if eos < textEmb.shape[0] {
-        parts.append(textEmb[eos...])
-      }
-
-      let merged = MLX.concatenated(parts, axis: 0)
-      allEmbeddings.append(merged)
-    }
-
-    // Pad to same length
-    let maxLen = allEmbeddings.map { $0.shape[0] }.max() ?? 0
-    let padded: [MLXArray] = allEmbeddings.map { emb in
-      if emb.shape[0] < maxLen {
-        let padding = MLXArray.zeros([maxLen - emb.shape[0], emb.shape[1]])
-        return MLX.concatenated([emb, padding], axis: 0)
-      }
-      return emb
-    }
-
-    return MLX.stacked(padded, axis: 0)
+    let preIds = MLXArray(preTokens.map { Int32($0) })
+    let postIds = MLXArray(postTokens.map { Int32($0) })
+    let preEmb = llm.getInputEmbeddings()(preIds)
+    let postEmb = llm.getInputEmbeddings()(postIds)
+    let audio = audioEmbeddings.ndim == 3 ? audioEmbeddings.squeezed(axis: 0) : audioEmbeddings
+    let combined = MLX.concatenated([preEmb, audio, postEmb], axis: 0)
+    return combined.expandedDimensions(axis: 0)
   }
 
   /// Sample next token from logits
@@ -150,7 +137,7 @@ class FunASRModel: Module {
     _ logits: MLXArray,
     temperature: Float = 0.0,
     topP: Float = 0.95,
-    topK: Int = 0
+    topK: Int = 0,
   ) -> MLXArray {
     // Get logits for last position - flatten to 1D for single batch
     var lastLogits = logits[0, -1, 0...]
@@ -239,7 +226,7 @@ class FunASRModel: Module {
   /// Load Fun-ASR model from a local directory
   static func load(
     from directory: URL,
-    variant: FunASRModelVariant = .nano4bit
+    variant: FunASRModelVariant = .nano4bit,
   ) throws -> FunASRModel {
     // Load config
     let configURL = directory.appending(path: "config.json")
@@ -255,7 +242,7 @@ class FunASRModel: Module {
     // Find and load weights
     let weightFiles = try FileManager.default.contentsOfDirectory(
       at: directory,
-      includingPropertiesForKeys: nil
+      includingPropertiesForKeys: nil,
     ).filter { $0.pathExtension == "safetensors" }
 
     guard !weightFiles.isEmpty else {
@@ -302,7 +289,7 @@ class FunASRModel: Module {
   static func load(
     variant: FunASRModelVariant = .nano4bit,
     from downloader: any Downloader,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
   ) async throws -> FunASRModel {
     let repoId = variant.repoId
     Log.model.info("Loading Fun-ASR from \(repoId)...")
@@ -320,7 +307,7 @@ class FunASRModel: Module {
         "merges.txt",
       ],
       useLatest: false,
-      progressHandler: progressHandler
+      progressHandler: progressHandler,
     )
 
     return try load(from: modelDirectory, variant: variant)

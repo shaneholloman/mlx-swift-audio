@@ -27,7 +27,7 @@ actor FunASRSTT {
   static func load(
     from directory: URL,
     variant: FunASRModelVariant = .nano4bit,
-    using tokenizerLoader: any TokenizerLoader
+    using tokenizerLoader: any TokenizerLoader,
   ) async throws -> FunASRSTT {
     let model = try FunASRModel.load(from: directory, variant: variant)
 
@@ -38,7 +38,7 @@ actor FunASRSTT {
     let tokenizer = try await FunASRTokenizer.load(
       from: modelDirectory,
       config: model.config,
-      using: tokenizerLoader
+      using: tokenizerLoader,
     )
 
     return FunASRSTT(model: model, tokenizer: tokenizer)
@@ -49,12 +49,12 @@ actor FunASRSTT {
     variant: FunASRModelVariant = .nano4bit,
     from downloader: any Downloader,
     using tokenizerLoader: any TokenizerLoader,
-    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in }
+    progressHandler: @escaping @Sendable (Progress) -> Void = { _ in },
   ) async throws -> FunASRSTT {
     let model = try await FunASRModel.load(
       variant: variant,
       from: downloader,
-      progressHandler: progressHandler
+      progressHandler: progressHandler,
     )
 
     guard let modelDirectory = model.modelDirectory else {
@@ -64,7 +64,7 @@ actor FunASRSTT {
     let tokenizer = try await FunASRTokenizer.load(
       from: modelDirectory,
       config: model.config,
-      using: tokenizerLoader
+      using: tokenizerLoader,
     )
 
     return FunASRSTT(model: model, tokenizer: tokenizer)
@@ -94,7 +94,7 @@ actor FunASRSTT {
     topP: Float = 0.95,
     topK: Int = 0,
     maxTokens: Int? = nil,
-    initialPrompt: String? = nil
+    initialPrompt: String? = nil,
   ) -> TranscriptionResult {
     let startTime = CFAbsoluteTimeGetCurrent()
     let actualMaxTokens = maxTokens ?? model.config.maxTokens
@@ -103,34 +103,19 @@ actor FunASRSTT {
     let audioEmbeddings = model.encodeAudio(audio)
     eval(audioEmbeddings)
 
-    // Build prompt and get token IDs
-    let promptTokenIds = tokenizer.buildPrompt(
+    // Build prompt as separate pre/post token sequences and splice the audio
+    // embeddings in between (matches PyTorch's `data_load_speech`).
+    let (preTokens, postTokens) = tokenizer.buildPromptParts(
       task: task,
       language: language,
       targetLanguage: targetLanguage,
-      initialPrompt: initialPrompt
+      initialPrompt: initialPrompt,
     )
 
-    // Convert to MLXArray
-    let inputIds = MLXArray(promptTokenIds.map { Int32($0) }).expandedDimensions(axis: 0)
-
-    // Merge audio embeddings with prompt
-    guard let sosId = tokenizer.sosTokenId, let eosId = tokenizer.eosTokenId else {
-      Log.model.error("Special token IDs not found in tokenizer")
-      return TranscriptionResult(
-        text: "",
-        language: language.rawValue,
-        segments: [],
-        processingTime: CFAbsoluteTimeGetCurrent() - startTime,
-        duration: Double(audio.shape[0]) / Double(FunASRAudio.sampleRate)
-      )
-    }
-
-    var inputEmbeddings = model.mergeEmbeddings(
-      inputIds: inputIds,
+    var inputEmbeddings = model.spliceEmbeddings(
+      preTokens: preTokens,
       audioEmbeddings: audioEmbeddings,
-      sosTokenId: sosId,
-      eosTokenId: eosId
+      postTokens: postTokens,
     )
 
     // Generate tokens with double-buffering
@@ -142,7 +127,7 @@ actor FunASRSTT {
       inputIds: nil,
       inputEmbeddings: inputEmbeddings,
       mask: nil,
-      cache: cache
+      cache: cache,
     )
     cache = newCache
     if let c = cache { asyncEval(logits, c) } else { asyncEval(logits) }
@@ -157,7 +142,7 @@ actor FunASRSTT {
         inputIds: nil,
         inputEmbeddings: inputEmbeddings,
         mask: nil,
-        cache: cache
+        cache: cache,
       )
       cache = newCache
       if let c = cache { asyncEval(logits, c) } else { asyncEval(logits) }
@@ -189,7 +174,7 @@ actor FunASRSTT {
       language: detectLanguageFromText(text, default: language),
       segments: [], // LLM-based model doesn't produce word-level timestamps
       processingTime: endTime - startTime,
-      duration: duration
+      duration: duration,
     )
   }
 
@@ -215,7 +200,7 @@ actor FunASRSTT {
     topP: Float = 0.95,
     topK: Int = 0,
     maxTokens: Int? = nil,
-    initialPrompt: String? = nil
+    initialPrompt: String? = nil,
   ) -> AsyncThrowingStream<Int, Error> {
     AsyncThrowingStream { continuation in
       Task { [self] in
@@ -226,25 +211,19 @@ actor FunASRSTT {
           let audioEmbeddings = model.encodeAudio(audio)
           eval(audioEmbeddings)
 
-          // Build prompt
-          let promptTokenIds = tokenizer.buildPrompt(
+          // Build prompt as separate pre/post token sequences and splice the
+          // audio embeddings in between.
+          let (preTokens, postTokens) = tokenizer.buildPromptParts(
             task: task,
             language: language,
             targetLanguage: targetLanguage,
-            initialPrompt: initialPrompt
+            initialPrompt: initialPrompt,
           )
 
-          let inputIds = MLXArray(promptTokenIds.map { Int32($0) }).expandedDimensions(axis: 0)
-
-          guard let sosId = tokenizer.sosTokenId, let eosId = tokenizer.eosTokenId else {
-            throw STTError.invalidArgument("Special token IDs not found")
-          }
-
-          var inputEmbeddings = model.mergeEmbeddings(
-            inputIds: inputIds,
+          var inputEmbeddings = model.spliceEmbeddings(
+            preTokens: preTokens,
             audioEmbeddings: audioEmbeddings,
-            sosTokenId: sosId,
-            eosTokenId: eosId
+            postTokens: postTokens,
           )
 
           var cache: [KVCacheSimple]? = nil
@@ -254,7 +233,7 @@ actor FunASRSTT {
             inputIds: nil,
             inputEmbeddings: inputEmbeddings,
             mask: nil,
-            cache: cache
+            cache: cache,
           )
           cache = newCache
           if let c = cache { asyncEval(logits, c) } else { asyncEval(logits) }
@@ -271,7 +250,7 @@ actor FunASRSTT {
               inputIds: nil,
               inputEmbeddings: inputEmbeddings,
               mask: nil,
-              cache: cache
+              cache: cache,
             )
             cache = newCache
             if let c = cache { asyncEval(logits, c) } else { asyncEval(logits) }
@@ -316,12 +295,12 @@ actor FunASRSTT {
     }
 
     // Character-based heuristics
-    let cjkCount = text.unicodeScalars.filter { $0.value >= 0x4E00 && $0.value <= 0x9FFF }.count
-    let japaneseCount = text.unicodeScalars.filter { $0.value >= 0x3040 && $0.value <= 0x30FF }.count
-    let koreanCount = text.unicodeScalars.filter { $0.value >= 0xAC00 && $0.value <= 0xD7AF }.count
-    let arabicCount = text.unicodeScalars.filter { $0.value >= 0x0600 && $0.value <= 0x06FF }.count
-    let thaiCount = text.unicodeScalars.filter { $0.value >= 0x0E00 && $0.value <= 0x0E7F }.count
-    let cyrillicCount = text.unicodeScalars.filter { $0.value >= 0x0400 && $0.value <= 0x04FF }.count
+    let cjkCount = text.unicodeScalars.count(where: { $0.value >= 0x4E00 && $0.value <= 0x9FFF })
+    let japaneseCount = text.unicodeScalars.count(where: { $0.value >= 0x3040 && $0.value <= 0x30FF })
+    let koreanCount = text.unicodeScalars.count(where: { $0.value >= 0xAC00 && $0.value <= 0xD7AF })
+    let arabicCount = text.unicodeScalars.count(where: { $0.value >= 0x0600 && $0.value <= 0x06FF })
+    let thaiCount = text.unicodeScalars.count(where: { $0.value >= 0x0E00 && $0.value <= 0x0E7F })
+    let cyrillicCount = text.unicodeScalars.count(where: { $0.value >= 0x0400 && $0.value <= 0x04FF })
 
     let total = text.count
     guard total > 0 else { return "unknown" }

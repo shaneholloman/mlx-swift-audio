@@ -52,7 +52,7 @@ class SenseVoiceEncoder: Module {
         dFF: config.ffnDim,
         kernelSize: config.kernelSize,
         sanmShift: config.sanmShift,
-        dropoutRate: config.dropout
+        dropoutRate: config.dropout,
       )
     }
 
@@ -65,7 +65,7 @@ class SenseVoiceEncoder: Module {
         dFF: config.ffnDim,
         kernelSize: config.kernelSize,
         sanmShift: config.sanmShift,
-        dropoutRate: config.dropout
+        dropoutRate: config.dropout,
       )
     }
 
@@ -78,7 +78,7 @@ class SenseVoiceEncoder: Module {
         dFF: config.ffnDim,
         kernelSize: config.kernelSize,
         sanmShift: config.sanmShift,
-        dropoutRate: config.dropout
+        dropoutRate: config.dropout,
       )
     }
 
@@ -96,7 +96,7 @@ class SenseVoiceEncoder: Module {
   ///   - Encoder output: (batch, seq, encoderDim)
   ///   - Output lengths: Same as input lengths
   func callAsFunction(_ x: MLXArray, lengths: MLXArray? = nil) -> (MLXArray, MLXArray) {
-    let (batchSize, seqLen, _) = (x.shape[0], x.shape[1], x.shape[2])
+    let (batchSize, seqLen, inputDim) = (x.shape[0], x.shape[1], x.shape[2])
 
     let actualLengths: MLXArray = if let lengths {
       lengths
@@ -104,8 +104,9 @@ class SenseVoiceEncoder: Module {
       MLXArray(Array(repeating: Int32(seqLen), count: batchSize))
     }
 
-    // Scale input by sqrt(output_size) - matches original
+    // Scale input by sqrt(output_size) and add sinusoidal position encoding
     var out = x * Float(sqrt(Double(outputSize)))
+    out = out + sinusoidalPositionEncoding(timesteps: seqLen, depth: inputDim, dtype: out.dtype)
 
     // No mask needed for full attention
     let mask: MLXArray? = nil
@@ -133,4 +134,22 @@ class SenseVoiceEncoder: Module {
 
     return (out, actualLengths)
   }
+}
+
+/// Sinusoidal position encoding matching FunASR's `SinusoidalPositionEncoder`.
+///
+/// Uses 1-based positions (1...timesteps), `log(10000)/(depth/2 - 1)` log timescale
+/// increment, and concatenates `[sin(pos · inv_t), cos(pos · inv_t)]` along the
+/// feature axis. The result has shape `(1, timesteps, depth)` and is added to the
+/// scaled input.
+private func sinusoidalPositionEncoding(timesteps: Int, depth: Int, dtype: DType) -> MLXArray {
+  let halfDepth = depth / 2
+  let logTimescaleIncrement = Float(log(10000.0)) / Float(halfDepth - 1)
+  let invTimescales = MLX.exp(
+    MLXArray(0 ..< halfDepth).asType(.float32) * -logTimescaleIncrement,
+  )
+  let positions = MLXArray(1 ... timesteps).asType(.float32)
+  let scaledTime = positions.expandedDimensions(axis: 1) * invTimescales.expandedDimensions(axis: 0)
+  let encoding = MLX.concatenated([MLX.sin(scaledTime), MLX.cos(scaledTime)], axis: -1)
+  return encoding.expandedDimensions(axis: 0).asType(dtype)
 }

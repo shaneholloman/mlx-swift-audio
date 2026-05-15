@@ -46,51 +46,110 @@ func hammingWindow(length: Int) -> MLXArray {
 
 // MARK: - Mel Spectrogram
 
-/// Compute log-mel spectrogram for Fun-ASR
+/// Compute kaldi-compatible log-mel filterbank features for Fun-ASR.
+///
+/// Approximates `torchaudio.compliance.kaldi.fbank` with the WavFrontend
+/// defaults from upstream Fun-ASR (`upsacle_samples=True`, `dither=1.0`,
+/// `pre-emphasis=0.97`, `window=hamming`, `snip_edges=True`, HTK mel,
+/// no Slaney normalization, `energy_floor=0`) plus the kaldi defaults
+/// that WavFrontend doesn't override (`remove_dc_offset=True`,
+/// `round_to_power_of_two=True`, `low_freq=20`):
+///
+/// 1. Upscale float audio by 32768 to int16 magnitude
+/// 2. Frame the signal with `snip_edges=True` (no padding; the trailing
+///    samples that don't fit a full window are discarded)
+/// 3. Optional Gaussian dither at int16 scale
+/// 4. Per-frame DC offset removal: subtract per-frame mean
+/// 5. Per-frame pre-emphasis: `y[i] = x[i] - 0.97 * x[i-1]`,
+///    `y[0] = (1 - 0.97) * x[0]`
+/// 6. Apply Hamming window
+/// 7. Zero-pad each windowed frame to the next power of two
+/// 8. Real FFT, drop the Nyquist bin
+/// 9. Power spectrum (`|X|^2`)
+/// 10. HTK mel filterbank with `low_freq=20` and no Slaney area normalization;
+///    frequency points are the actual FFT bin centers
+/// 11. Natural log with a small floor to avoid `log(0)`
 ///
 /// - Parameters:
-///   - audio: Audio waveform (T,) at 16kHz
+///   - audio: Audio waveform (T,) at 16 kHz, float in [-1, 1]
 ///   - nMels: Number of mel filterbank bins (default: 80)
-///   - nFft: FFT size (default: 400)
-///   - hopLength: Hop length (default: 160)
-/// - Returns: Log-mel spectrogram (n_frames, n_mels)
+///   - nFft: Window length in samples (default: 400, i.e., 25 ms at 16 kHz).
+///     The actual FFT length is rounded up to the next power of two.
+///   - hopLength: Hop length (default: 160, i.e., 10 ms at 16 kHz)
+/// - Returns: Log-mel features `(numFrames, nMels)`
 func funASRLogMelSpectrogram(
   audio: MLXArray,
   nMels: Int = FunASRAudio.nMels,
   nFft: Int = FunASRAudio.nFft,
-  hopLength: Int = FunASRAudio.hopLength
+  hopLength: Int = FunASRAudio.hopLength,
+  dither: Float = 0.0,
 ) -> MLXArray {
-  // Create Hamming window (Fun-ASR uses Hamming)
+  // Upscale to int16 magnitude (matches `upsacle_samples=True`).
+  let upscaled = audio * Float(1 << 15)
+
+  // snip_edges=True framing: no padding, drop trailing partial frame.
+  precondition(upscaled.shape[0] >= nFft, "Audio is too short for one frame (\(upscaled.shape[0]) < \(nFft))")
+  let numFrames = (upscaled.shape[0] - nFft) / hopLength + 1
+  var frames = MLX.asStrided(upscaled, [numFrames, nFft], strides: [hopLength, 1])
+
+  // Optional Gaussian dither (kaldi default `dither=1.0`).
+  if dither != 0 {
+    frames = frames + MLXRandom.normal([numFrames, nFft]) * dither
+  }
+
+  // Per-frame DC offset removal (kaldi `remove_dc_offset=True`).
+  let frameMean = frames.mean(axis: -1, keepDims: true)
+  let dcRemoved = frames - frameMean
+
+  // Per-frame pre-emphasis: y[i] = x[i] - 0.97 * x[i-1], y[0] = 0.03 * x[0].
+  let firstColumn = dcRemoved[0..., 0 ..< 1]
+  let allButLast = dcRemoved[0..., 0 ..< (nFft - 1)]
+  let shifted = MLX.concatenated([firstColumn, allButLast], axis: -1)
+  let preemphasized = dcRemoved - 0.97 * shifted
+
+  // Hamming window.
   let window = hammingWindow(length: nFft)
+  let windowed = preemphasized * window
 
-  // Compute STFT
-  let stftResult = funASRSTFT(
-    audio,
-    window: window,
-    nFft: nFft,
-    hopLength: hopLength
-  )
+  // Zero-pad to next power of two for the FFT (kaldi `round_to_power_of_two`).
+  let fftLength = nextPowerOfTwo(nFft)
+  let padLength = fftLength - nFft
+  let padded: MLXArray = if padLength > 0 {
+    MLX.concatenated([windowed, MLXArray.zeros([numFrames, padLength])], axis: -1)
+  } else {
+    windowed
+  }
+  let spec = MLX.rfft(padded)
 
-  // Compute power spectrum (magnitude squared)
-  // Remove last frequency bin to get (n_frames, n_fft/2)
-  let freqs = stftResult[0..., 0 ..< (nFft / 2)]
+  // Power spectrum, drop the Nyquist bin to keep nFreqs = fftLength/2.
+  let nFreqs = fftLength / 2
+  let freqs = spec[0..., 0 ..< nFreqs]
   let magnitudes = MLX.pow(MLX.abs(freqs), 2)
 
-  // Create mel filterbank with HTK scale (Fun-ASR uses htk)
+  // Kaldi-compatible mel filterbank: HTK scale triangles in mel space,
+  // no Slaney normalization, low_freq=20 Hz, FFT-bin frequencies.
   let filters = funASRMelFilters(
     sampleRate: FunASRAudio.sampleRate,
-    nFft: nFft,
+    fftLength: fftLength,
     nMels: nMels,
-    melScale: .htk
+    fMin: 20.0,
   )
 
-  // Apply mel filterbank: (T, F) @ (F, M) -> (T, M)
+  // (T, F) @ (F, M) -> (T, M)
   let melSpec = MLX.matmul(magnitudes, filters.transposed())
 
-  // Log compression (natural log, matching Python)
-  let logSpec = MLX.log(MLX.maximum(melSpec, MLXArray(1e-10)))
+  // Natural log with kaldi's FLT_EPSILON floor (≈ 1.19e-7).
+  return MLX.log(MLX.maximum(melSpec, MLXArray(Float.ulpOfOne)))
+}
 
-  return logSpec
+/// Smallest power of two that is >= `n`. Returns 1 for `n <= 0`.
+private func nextPowerOfTwo(_ n: Int) -> Int {
+  guard n > 1 else { return max(1, n) }
+  var p = 1
+  while p < n {
+    p <<= 1
+  }
+  return p
 }
 
 // MARK: - LFR Processing
@@ -108,7 +167,7 @@ func funASRLogMelSpectrogram(
 func applyLFR(
   _ features: MLXArray,
   lfrM: Int = FunASRAudio.lfrM,
-  lfrN: Int = FunASRAudio.lfrN
+  lfrN: Int = FunASRAudio.lfrN,
 ) -> MLXArray {
   let T = features.shape[0]
   let nMels = features.shape[1]
@@ -165,7 +224,7 @@ func applyLFR(
 func applyCMVN(
   _ features: MLXArray,
   cmvnMean: MLXArray? = nil,
-  cmvnIstd: MLXArray? = nil
+  cmvnIstd: MLXArray? = nil,
 ) -> MLXArray {
   if let mean = cmvnMean, let istd = cmvnIstd {
     // Apply precomputed CMVN: (x + mean) * istd
@@ -183,26 +242,28 @@ func applyCMVN(
 
 /// Full audio preprocessing pipeline for Fun-ASR
 ///
-/// 1. Compute log mel spectrogram
+/// 1. Compute kaldi-compatible log-mel filterbank features
 /// 2. Apply LFR (frame stacking and subsampling)
-/// 3. Apply CMVN normalization
+/// 3. Optionally apply CMVN normalization (off by default; the upstream
+///    Fun-ASR-Nano-2512 config has `cmvn_file: null`)
 ///
 /// - Parameters:
 ///   - audio: Input audio waveform (T,) at 16kHz
 ///   - nMels: Number of mel bins (default: 80)
 ///   - lfrM: LFR frame stacking count (default: 7)
 ///   - lfrN: LFR subsampling factor (default: 6)
-///   - applyNormalization: Whether to apply CMVN (default: true)
+///   - applyNormalization: Whether to apply CMVN (default: false)
 /// - Returns: Preprocessed features (ceil(T / (hopLength * lfrN)), nMels * lfrM)
 func preprocessAudio(
   _ audio: MLXArray,
   nMels: Int = FunASRAudio.nMels,
   lfrM: Int = FunASRAudio.lfrM,
   lfrN: Int = FunASRAudio.lfrN,
-  applyNormalization: Bool = true
+  applyNormalization: Bool = false,
+  dither: Float = 0.0,
 ) -> MLXArray {
   // Compute log mel spectrogram
-  var features = funASRLogMelSpectrogram(audio: audio, nMels: nMels)
+  var features = funASRLogMelSpectrogram(audio: audio, nMels: nMels, dither: dither)
 
   // Apply LFR processing
   features = applyLFR(features, lfrM: lfrM, lfrN: lfrN)
@@ -225,7 +286,7 @@ func preprocessAudio(
 func computeFeatureLength(
   audioLength: Int,
   hopLength: Int = FunASRAudio.hopLength,
-  lfrN: Int = FunASRAudio.lfrN
+  lfrN: Int = FunASRAudio.lfrN,
 ) -> Int {
   // Frames after STFT (approximately)
   let nFrames = audioLength / hopLength
@@ -236,161 +297,58 @@ func computeFeatureLength(
 
 // MARK: - Private Helper Functions
 
-/// Compute STFT of a signal
-private func funASRSTFT(
-  _ x: MLXArray,
-  window: MLXArray,
-  nFft: Int,
-  hopLength: Int,
-  center: Bool = true
-) -> MLXArray {
-  var xArray = x
-
-  // Pad window to nFft if needed
-  var w = window
-  if w.shape[0] < nFft {
-    let padSize = nFft - w.shape[0]
-    w = MLX.concatenated([w, MLXArray.zeros([padSize])])
-  }
-
-  // Center padding with reflection
-  if center {
-    xArray = reflectPad1D(xArray, padding: nFft / 2)
-  }
-
-  // Calculate number of frames
-  let numFrames = 1 + (xArray.shape[0] - nFft) / hopLength
-  guard numFrames > 0 else {
-    fatalError("Input is too short for STFT")
-  }
-
-  // Create frames using as_strided
-  let shape = [numFrames, nFft]
-  let strides = [hopLength, 1]
-  let frames = MLX.asStrided(xArray, shape, strides: strides)
-
-  // Apply window and compute FFT
-  let windowedFrames = frames * w
-  let spec = MLX.rfft(windowedFrames)
-
-  return spec
-}
-
-/// Reflect padding for 1D array
-private func reflectPad1D(_ x: MLXArray, padding: Int) -> MLXArray {
-  if padding == 0 {
-    return x
-  }
-
-  let n = x.shape[0]
-  if n == 1 {
-    return MLX.concatenated([
-      MLXArray.full([padding], values: x[0]),
-      x,
-      MLXArray.full([padding], values: x[0]),
-    ])
-  }
-
-  // Reflect at boundaries
-  var prefixArray = reverseAlongAxis(x[1 ..< min(padding + 1, n)], axis: 0)
-  var suffixArray = reverseAlongAxis(x[max(0, n - padding - 1) ..< (n - 1)], axis: 0)
-
-  // Handle cases where array is shorter than padding
-  while prefixArray.shape[0] < padding {
-    let additional = min(padding - prefixArray.shape[0], n - 1)
-    prefixArray = MLX.concatenated([reverseAlongAxis(x[1 ..< (additional + 1)], axis: 0), prefixArray])
-  }
-
-  while suffixArray.shape[0] < padding {
-    let additional = min(padding - suffixArray.shape[0], n - 1)
-    suffixArray = MLX.concatenated([suffixArray, reverseAlongAxis(x[(n - additional - 1) ..< (n - 1)], axis: 0)])
-  }
-
-  return MLX.concatenated([prefixArray[0 ..< padding], x, suffixArray[0 ..< padding]])
-}
-
-/// Mel scale type
-private enum MelScale {
-  case slaney
-  case htk
-}
-
-/// Create mel filterbank using vectorized MLX operations
+/// Build the kaldi-compliant HTK mel filterbank.
 ///
-/// This is optimized to use MLX operations for parallel computation on GPU,
-/// avoiding CPU loops for better performance.
+/// Triangles are constructed in **mel space** (not Hz space): filter centers
+/// are evenly spaced in mel from `fMin` to Nyquist, and the rising/falling
+/// edges are normalized by the mel widths of each triangle. FFT-bin
+/// frequencies are converted to mel via the HTK formula
+/// `2595 · log10(1 + hz/700)` and the up/down slopes are computed against the
+/// mel center positions. This matches `torchaudio.compliance.kaldi.get_mel_banks`.
+///
+/// - Returns: filterbank of shape `(nMels, nFreqs)` where `nFreqs = fftLength / 2`.
 private func funASRMelFilters(
   sampleRate: Int,
-  nFft: Int,
+  fftLength: Int,
   nMels: Int,
   fMin: Float = 0.0,
   fMax: Float? = nil,
-  melScale: MelScale = .htk
 ) -> MLXArray {
   let actualFMax = fMax ?? Float(sampleRate) / 2.0
+  let nFreqs = fftLength / 2
 
-  // Vectorized mel scale conversion functions
-  func hzToMel(_ hz: Float) -> Float {
-    switch melScale {
-      case .htk:
-        return 2595.0 * log10(1.0 + hz / 700.0)
-      case .slaney:
-        let fSp: Float = 200.0 / 3.0
-        let minLogHz: Float = 1000.0
-        let minLogMel = minLogHz / fSp
-        let logstep: Float = log(6.4) / 27.0
-        return hz >= minLogHz ? minLogMel + log(hz / minLogHz) / logstep : hz / fSp
-    }
-  }
+  // FFT bin center frequencies in Hz: k * sample_rate / fft_length.
+  let fftBinWidth = Float(sampleRate) / Float(fftLength)
+  let allFreqsHz = MLXArray(0 ..< nFreqs).asType(.float32) * fftBinWidth
 
-  func melToHzVectorized(_ mels: MLXArray) -> MLXArray {
-    switch melScale {
-      case .htk:
-        // HTK formula: 700 * (10^(mel / 2595) - 1)
-        return 700.0 * (MLX.pow(MLXArray(10.0), mels / 2595.0) - 1.0)
-      case .slaney:
-        let fSp: Float = 200.0 / 3.0
-        let minLogHz: Float = 1000.0
-        let minLogMel = minLogHz / fSp
-        let logstep: Float = log(6.4) / 27.0
-        let linear = fSp * mels
-        let logarithmic = minLogHz * MLX.exp(logstep * (mels - minLogMel))
-        return MLX.where(mels .>= minLogMel, logarithmic, linear)
-    }
-  }
+  // Convert FFT bin frequencies to mel via HTK formula.
+  let allFreqsMel = 2595.0 * MLX.log10(1.0 + allFreqsHz / 700.0)
 
-  // Generate frequency points using MLX linspace
-  let nFreqs = nFft / 2
-  let allFreqs = MLX.linspace(Float(0), Float(sampleRate) / 2.0, count: nFreqs)
+  // Mel center positions for the (nMels + 2) bin edges, evenly spaced in mel.
+  let melLowFreq = 2595.0 * log10f(1.0 + fMin / 700.0)
+  let melHighFreq = 2595.0 * log10f(1.0 + actualFMax / 700.0)
+  let melFreqDelta = (melHighFreq - melLowFreq) / Float(nMels + 1)
 
-  // Convert frequencies to mel and back to hz using vectorized operations
-  let mMin = hzToMel(fMin)
-  let mMax = hzToMel(actualFMax)
-  let mPts = MLX.linspace(mMin, mMax, count: nMels + 2)
-  let fPts = melToHzVectorized(mPts)
+  // Per-bin mel triangle vertices: left = lowFreq + i·delta, center = lowFreq + (i+1)·delta,
+  // right = lowFreq + (i+2)·delta, for i in 0..<nMels.
+  let bin = MLXArray(0 ..< nMels).asType(.float32)
+  let leftMel = melLowFreq + bin * melFreqDelta // (nMels,)
+  let centerMel = melLowFreq + (bin + 1.0) * melFreqDelta
+  let rightMel = melLowFreq + (bin + 2.0) * melFreqDelta
 
-  // Compute slopes for filterbank using broadcasting
-  // Python: slopes = f_pts[None, :] - all_freqs[:, None]
-  // slopes[i, j] = f_pts[j] - all_freqs[i]
-  let fDiff = fPts[1...] - fPts[..<(-1)]
-  let slopes = fPts.expandedDimensions(axis: 0) - allFreqs.expandedDimensions(axis: 1)
+  // Broadcast to (nFreqs, nMels): up/down slopes in mel space.
+  let melMatrix = allFreqsMel.expandedDimensions(axis: 1) // (nFreqs, 1)
+  let upSlope = (melMatrix - leftMel.expandedDimensions(axis: 0)) /
+    (centerMel - leftMel).expandedDimensions(axis: 0)
+  let downSlope = (rightMel.expandedDimensions(axis: 0) - melMatrix) /
+    (rightMel - centerMel).expandedDimensions(axis: 0)
 
-  // Calculate overlapping triangular filters
-  // down_slopes = -slopes[:, :-2] / f_diff[:-1]  (rising edge)
-  // up_slopes = slopes[:, 2:] / f_diff[1:]       (falling edge)
-  let downSlopes = -slopes[0..., ..<(-2)] / fDiff[..<(-1)]
-  let upSlopes = slopes[0..., 2...] / fDiff[1...]
-
-  // filterbank = max(0, min(down_slopes, up_slopes))
-  var filterbank = MLX.maximum(
-    MLXArray.zeros(like: downSlopes),
-    MLX.minimum(downSlopes, upSlopes)
+  // Triangle: max(0, min(up, down)). Shape: (nFreqs, nMels).
+  let filterbank = MLX.maximum(
+    MLXArray.zeros(like: upSlope),
+    MLX.minimum(upSlope, downSlope),
   )
 
-  // Apply Slaney normalization
-  let enorm = 2.0 / (fPts[2 ..< (nMels + 2)] - fPts[0 ..< nMels])
-  filterbank = filterbank * enorm.expandedDimensions(axis: 0)
-
-  // Transpose: (nFreqs, nMels) -> (nMels, nFreqs)
+  // Transpose to (nMels, nFreqs) to match callsite.
   return filterbank.transposed()
 }

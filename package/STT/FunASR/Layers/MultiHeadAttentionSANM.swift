@@ -42,7 +42,7 @@ class MultiHeadAttentionSANM: Module {
     nFeat: Int,
     kernelSize: Int = 11,
     sanmShift: Int = 0,
-    dropoutRate: Float = 0.0
+    dropoutRate: Float = 0.0,
   ) {
     precondition(nFeat % nHead == 0, "nFeat must be divisible by nHead")
 
@@ -66,7 +66,7 @@ class MultiHeadAttentionSANM: Module {
       stride: 1,
       padding: 0,
       groups: nFeat,
-      bias: false
+      bias: false,
     )
 
     // Compute padding amounts
@@ -97,8 +97,10 @@ class MultiHeadAttentionSANM: Module {
       }
     }
 
-    // Apply mask before conv
-    var x = maskReshaped.map { inputs * $0 } ?? inputs
+    // Apply mask before conv. Match PyTorch's `inputs = inputs * mask` rebind:
+    // both the conv input and the residual must use the masked tensor.
+    let maskedInputs = maskReshaped.map { inputs * $0 } ?? inputs
+    var x = maskedInputs
 
     // Apply explicit padding and depthwise conv
     if leftPadding > 0 || rightPadding > 0 {
@@ -111,7 +113,7 @@ class MultiHeadAttentionSANM: Module {
     x = fsmnBlock(x)
 
     // Residual connection, dropout, and mask again
-    x = dropout(x + inputs)
+    x = dropout(x + maskedInputs)
     return maskReshaped.map { x * $0 } ?? x
   }
 
@@ -158,7 +160,7 @@ class MultiHeadAttentionSANM: Module {
       keys: kH,
       values: vH,
       scale: Float(pow(Double(dK), -0.5)),
-      mask: attnMask
+      mask: attnMask,
     )
 
     // Apply dropout after attention
@@ -222,7 +224,7 @@ class FunASRMultiHeadAttention: Module {
     query: MLXArray,
     key: MLXArray,
     value: MLXArray,
-    mask: MLXArray? = nil
+    mask: MLXArray? = nil,
   ) -> MLXArray {
     let batchSize = query.shape[0]
 
@@ -247,7 +249,7 @@ class FunASRMultiHeadAttention: Module {
       keys: kH,
       values: vH,
       scale: Float(pow(Double(dK), -0.5)),
-      mask: attnMask
+      mask: attnMask,
     )
 
     // Apply dropout after attention
